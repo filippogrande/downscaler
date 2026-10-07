@@ -1,0 +1,12 @@
+[Unit]
+Description=Emergency Stop — spegne servizi non critici quando il server soffre
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/emergency-stop/emergency-stop.py
+User=root
+
+[Install]
+WantedBy=multi-user.target

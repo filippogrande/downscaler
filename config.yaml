@@ -1,0 +1,38 @@
+# Emergency Stop Configuration
+# Modifica questa file e riavvia il timer: sudo systemctl restart emergency-stop.timer
+
+glances:
+  url: "http://localhost:61208"  # URL API Glances
+
+monitor:
+  metric: "iowait"        # "iowait" o "load"
+  threshold: 80.0         # soglia (% per iowait, valore per load1)
+  duration_sec: 120       # deve restare sopra per 2 minuti prima di agire
+  check_interval_sec: 60  # ogni quanto controlla
+
+# Servizi che possono essere fermati, in ordine di priorità
+# Il primo è il più "conveniente" da fermare
+stop_order:
+  - sabnzbd
+  - prowlarr
+  - radarr
+  - sonarr
+  # jellyfin, hermes, nextcloud, vikunja, immich NON vanno mai fermati
+
+services:
+  sabnzbd:
+    compose_dir: "/mnt/applicazioni/yml/docker/sabnzbd"
+    compose_file: "compose.yml"
+  prowlarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/prowlarr"
+    compose_file: "compose.yml"
+  radarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/radarr"
+    compose_file: "compose.yml"
+  sonarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/sonarr"
+    compose_file: "compose.yml"
+
+recovery:
+  calm_duration_sec: 3600   # 1h senza allarme prima di riaccendere
+  restart_delay_sec: 30      # attesa tra un riavvio e il successivo
