@@ -3,10 +3,11 @@
 Emergency Stop — spegne servizi non critici quando il server soffre.
 
 Logica:
-1. Monitora Glances API (iowait o load)
-2. Se sopra soglia per duration_sec → stoppa il primo servizio in lista
-3. Aspetta 30s → ricontrolla. Se migliorato → recovery mode
-4. Recovery: 1h senza allarme → riaccende in ordine inverso
+1. Health check: riavvia servizi down che non sono stati spenti dal sistema
+2. Monitora Glances API (iowait o load)
+3. Se sopra soglia per duration_sec → stoppa il primo servizio in lista
+4. Aspetta 30s → ricontrolla. Se migliorato → recovery mode
+5. Recovery: 1h senza allarme → riaccende in ordine inverso
 
 State: /tmp/emergency-stop-state.json
 """
@@ -80,10 +81,19 @@ def get_glances_metric(config: dict) -> float:
 
 # ─── Docker ──────────────────────────────────────────────────────────────────
 
+def is_service_running(service: str) -> bool:
+    """Controlla se un servizio è attivo."""
+    ps = subprocess.run(
+        ["docker", "ps", "--filter", f"name={service}", "--format", "{{.Names}}"],
+        capture_output=True, text=True, timeout=10,
+    )
+    return service in ps.stdout
+
+
 def stop_service(service: str, config: dict):
     """Ferma un servizio con docker compose down."""
     compose_dir = Path(config["services"][service]["compose_dir"])
-    compose_file = config["services"][service].get("compose_file", "compose.yml")
+    compose_file = config["services"][service].get("compose_file", "docker-compose.yml")
     cmd = ["docker", "compose", "-f", str(compose_dir / compose_file), "down"]
     log.info(f"STOP: {service} → {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -92,11 +102,7 @@ def stop_service(service: str, config: dict):
         return False
     # Verifica che sia davvero spento
     time.sleep(5)
-    ps = subprocess.run(
-        ["docker", "ps", "--filter", f"name={service}", "--format", "{{.Names}}"],
-        capture_output=True, text=True, timeout=10,
-    )
-    if service in ps.stdout:
+    if is_service_running(service):
         log.error(f"{service} ancora attivo dopo down!")
         return False
     log.info(f"✓ {service} spento correttamente")
@@ -106,7 +112,7 @@ def stop_service(service: str, config: dict):
 def start_service(service: str, config: dict):
     """Riaccende un servizio con docker compose up -d."""
     compose_dir = Path(config["services"][service]["compose_dir"])
-    compose_file = config["services"][service].get("compose_file", "compose.yml")
+    compose_file = config["services"][service].get("compose_file", "docker-compose.yml")
     cmd = ["docker", "compose", "-f", str(compose_dir / compose_file), "up", "-d"]
     log.info(f"START: {service} → {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
@@ -115,6 +121,18 @@ def start_service(service: str, config: dict):
         return False
     log.info(f"✓ {service} riavviato")
     return True
+
+# ─── Health Check ────────────────────────────────────────────────────────────
+
+def health_check(config: dict, state: dict):
+    """Riavvia servizi down che non sono stati spenti dal sistema."""
+    stopped = set(state["stopped_services"])
+    for service in config["stop_order"]:
+        if service in stopped:
+            continue  # stato spento intenzionalmente dal sistema
+        if not is_service_running(service):
+            log.info(f"Health check: {service} è down, lo riavvio")
+            start_service(service, config)
 
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
@@ -125,6 +143,9 @@ def main():
 
     config = yaml.safe_load(CONFIG_PATH.read_text())
     state = load_state()
+
+    # ── Health check: riavvia servizi down non spenti dal sistema ──────────
+    health_check(config, state)
 
     metric_value = get_glances_metric(config)
     threshold = config["monitor"]["threshold"]
