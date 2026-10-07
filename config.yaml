@@ -5,10 +5,12 @@ glances:
   url: "http://10.0.0.5:61208"
 
 monitor:
-  metric: "iowait"        # "iowait" o "load"
-  threshold: 80.0         # soglia (% per iowait, valore per load1)
-  duration_sec: 120       # deve restare sopra per 2 minuti prima di agire
-  check_interval_sec: 60  # ogni quanto controlla
+  metric: "iowait"              # "iowait" o "load"
+  sample_interval_sec: 30       # campiona ogni 30s
+  window_sec: 120              # finestra media mobile: 2 min
+  stop_threshold: 80.0         # media > 80% → ferma un servizio
+  restart_threshold: 60.0      # media < 60% → può riavviare
+  check_interval_sec: 60      # esegui il loop ogni 60s
 
 # Servizi che possono essere fermati, in ordine di priorità
 # Primo = più conveniente fermare (facile → medio → difficile)
@@ -101,5 +103,11 @@ services:
     compose_file: "docker-compose.yml"
 
 recovery:
-  calm_duration_sec: 3600   # 1h senza allarme prima di riaccendere
-  restart_delay_sec: 30      # attesa tra un riavvio e il successivo
+  calm_duration_sec: 300       # 5 min di calma (media < 60%) prima di riavviare
+  restart_delay_sec: 300        # 5 min tra un riavvio e il successivo
+  restart_check_sec: 30         # controlla ogni 30s se la calma è mantenuta
+
+telegram:
+  enabled: true
+  bot_token: "INSERISCI_BOT_TOKEN"
+  chat_id: "INSERISCI_CHAT_ID"
