@@ -1,8 +1,8 @@
 # Emergency Stop Configuration
-# Modifica questa file e riavvia il timer: sudo systemctl restart emergency-stop.timer
+# Modifica su GitHub → git pull sul server → sudo systemctl restart emergency-stop.timer
 
 glances:
-  url: "http://localhost:61208"  # URL API Glances
+  url: "http://10.0.0.5:61208"
 
 monitor:
   metric: "iowait"        # "iowait" o "load"
@@ -11,27 +11,94 @@ monitor:
   check_interval_sec: 60  # ogni quanto controlla
 
 # Servizi che possono essere fermati, in ordine di priorità
-# Il primo è il più "conveniente" da fermare
+# Primo = più conveniente fermare (facile → medio → difficile)
 stop_order:
-  - sabnzbd
+  # ── Facili (batch/differibili, nessun impatto utente) ──
+  - jellyseer
+  - lidarr
+  - sonarr
+  - sonarr-anime
   - prowlarr
   - radarr
-  - sonarr
-  # jellyfin, hermes, nextcloud, vikunja, immich NON vanno mai fermati
+  - recyclarr
+  - stash
+  - gramps
+  - warracker
+  - cleanuparr
+  - airtrail
+  - trip
+  # ── Medi (servizi attivi ma non critici) ──
+  - qbittorrent
+  - suwayomi
+  - suwayomi-nsfw
+  - interesting-items
+  - romm
+  # ── Difficili (servizi che vuoi tenere su il più possibile) ──
+  - langfuse
+  - jellyfin
+  # MAI fermare: nextcloud, vikunja, immich, hermes, glances, uptime-kuma, ecc.
 
 services:
-  sabnzbd:
-    compose_dir: "/mnt/applicazioni/yml/docker/sabnzbd"
-    compose_file: "compose.yml"
-  prowlarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/prowlarr"
-    compose_file: "compose.yml"
-  radarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/radarr"
-    compose_file: "compose.yml"
+  jellyseer:
+    compose_dir: "/mnt/applicazioni/yml/docker/jellyseer"
+    compose_file: "docker-compose.yml"
+  lidarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/lidarr"
+    compose_file: "docker-compose.yml"
   sonarr:
     compose_dir: "/mnt/applicazioni/yml/docker/sonarr"
-    compose_file: "compose.yml"
+    compose_file: "docker-compose.yml"
+  sonarr-anime:
+    compose_dir: "/mnt/applicazioni/yml/docker/sonarr-anime"
+    compose_file: "docker-compose.yml"
+  prowlarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/prowlarr"
+    compose_file: "docker-compose.yml"
+  radarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/radarr"
+    compose_file: "docker-compose.yml"
+  recyclarr:
+    compose_dir: "/mnt/applicazioni/yml/docker/recyclarr"
+    compose_file: "docker-compose.yml"
+  stash:
+    compose_dir: "/mnt/applicazioni/yml/docker/stash"
+    compose_file: "docker-compose.yml"
+  gramps:
+    compose_dir: "/mnt/applicazioni/yml/docker/gramps"
+    compose_file: "docker-compose.yml"
+  warracker:
+    compose_dir: "/mnt/applicazioni/yml/docker/warracker"
+    compose_file: "docker-compose.yml"
+  cleanuparr:
+    compose_dir: "/mnt/applicazioni/yml/docker/cleanuparr"
+    compose_file: "docker-compose.yml"
+  airtrail:
+    compose_dir: "/mnt/applicazioni/yml/docker/airtrail"
+    compose_file: "docker-compose.yml"
+  trip:
+    compose_dir: "/mnt/applicazioni/yml/docker/trip"
+    compose_file: "docker-compose.yml"
+  qbittorrent:
+    compose_dir: "/mnt/applicazioni/yml/docker/qbittorrent"
+    compose_file: "docker-compose.yml"
+  suwayomi:
+    compose_dir: "/mnt/applicazioni/yml/docker/suwayomi"
+    compose_file: "docker-compose.yml"
+  suwayomi-nsfw:
+    compose_dir: "/mnt/applicazioni/yml/docker/suwayomi-nsfw"
+    compose_file: "docker-compose.yml"
+  interesting-items:
+    compose_dir: "/mnt/applicazioni/yml/docker/interesting-items"
+    compose_file: "docker-compose.yml"
+  romm:
+    compose_dir: "/mnt/applicazioni/yml/docker/romm"
+    compose_file: "docker-compose.yml"
+  langfuse:
+    compose_dir: "/mnt/applicazioni/yml/docker/langfuse"
+    compose_file: "docker-compose.yml"
+  jellyfin:
+    compose_dir: "/mnt/applicazioni/yml/docker/jellyfin"
+    compose_file: "docker-compose.yml"
 
 recovery:
   calm_duration_sec: 3600   # 1h senza allarme prima di riaccendere
