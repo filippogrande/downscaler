@@ -50,12 +50,13 @@ python3 /opt/emergency-stop/emergency-stop.py
 
 ## Come funziona
 
-1. Ogni 60s legge iowait/load da Glances
-2. Se sopra soglia per 2 min → ferma il primo servizio in lista
-3. Aspetta 30s → ricontrolla. Se migliorato → recovery mode
-4. Recovery: 1h senza allarme → riaccende in ordine inverso
+1. **Health check**: ogni 60s verifica che tutti i servizi in `stop_order` siano attivi. Se uno è down e non è stato spento dal sistema, lo riavvia automaticamente.
+2. **Monitor**: legge iowait/load da Glances
+3. **Stop**: se sopra soglia per 2 min → ferma il primo servizio in lista
+4. **Verifica**: aspetta 30s → ricontrolla. Se migliorato → recovery mode
+5. **Recovery**: 1h senza allarme → riaccende in ordine inverso
 
 ## Servizi mai fermati
 
-Jellyfin, Hermes, Nextcloud, Vikunja, Immich non sono in `stop_order`
-quindi non verranno mai fermati.
+I servizi non in `stop_order` non vengono mai toccati.
+Attualmente esclusi: Nextcloud, Vikunja, Immich, Hermes, Glances, Uptime Kuma, ecc.
