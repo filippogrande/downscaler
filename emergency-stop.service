@@ -5,12 +5,9 @@ Wants=docker.service
 
 [Service]
 Type=oneshot
-# Il venv e' creato da install.sh: qui si usa il suo python, non quello di sistema
-# (Debian blocca l'installazione globale con PEP 668).
-ExecStartPre=/mnt/applicazioni/emergency-stop/venv/bin/python -c "import requests, yaml"
-ExecStart=/mnt/applicazioni/emergency-stop/venv/bin/python /mnt/applicazioni/emergency-stop/emergency-stop.py
+# Job one-shot: systemd lancia il container, il timer lo richiama ogni 60s.
+ExecStart=/usr/bin/docker start -a emergency-stop
 User=root
-WorkingDirectory=/etc/emergency-stop
 
 [Install]
 WantedBy=multi-user.target
