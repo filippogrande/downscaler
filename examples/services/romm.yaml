@@ -1,0 +1,11 @@
+name: romm
+compose_dir: /mnt/applicazioni/yml/docker/romm
+compose_file: docker-compose.yml
+service_name:
+  - romm-romm-1
+  - romm-romm-pg-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 170
+note: "romm-romm-pg-1 e' il suo postgres dedicato: down spegne tutto il compose"
