@@ -1,0 +1,10 @@
+name: warracker
+compose_dir: /mnt/applicazioni/yml/docker/warracker
+compose_file: docker-compose.yml
+service_name:
+  - warracker-warracker-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 110
+note: "warracker-warrackerdb-1 (H2 interno) resta su: down spegne solo l'app"
