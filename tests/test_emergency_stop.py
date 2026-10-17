@@ -10,7 +10,6 @@ from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -172,7 +171,7 @@ def test_config_yaml_del_repo_e_valido():
 
 
 def test_nessun_compose_con_placeholder():
-    # La regola e' valori letterali: nessun ${} nei compose consegnati.
+    # La regola e' valori letterali: nessun ${} o build: nei compose.
     text = (REPO / "docker-compose.yml").read_text()
 
     assert "${" not in text, "il compose non deve usare interpolazione"
