@@ -1,0 +1,9 @@
+name: sonarr-anime
+compose_dir: /mnt/applicazioni/yml/docker/sonarr-anime
+compose_file: docker-compose.yml
+service_name:
+  - sonarr-anime
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 40

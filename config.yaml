@@ -1,5 +1,8 @@
-# Emergency Stop Configuration
-# Modifica su GitHub → git pull sul server → sudo systemctl restart emergency-stop.timer
+# Emergency Stop — configurazione (copia in /etc/emergency-stop/config.yaml)
+#
+# Qui stanno SOLO le soglie e i collegamenti esterni.
+# L'elenco dei servizi e' in /etc/emergency-stop/services/<nome>.yaml
+# (un file per servizio: aggiungerne uno non tocca questo file).
 
 glances:
   url: "http://10.0.0.5:61208"
@@ -7,105 +10,15 @@ glances:
 monitor:
   metric: "iowait"              # "iowait" o "load"
   sample_interval_sec: 30       # campiona ogni 30s
-  window_sec: 120              # finestra media mobile: 2 min
-  stop_threshold: 80.0         # media > 80% → ferma un servizio
-  restart_threshold: 60.0      # media < 60% → può riavviare
-  check_interval_sec: 60      # esegui il loop ogni 60s
-
-# Servizi che possono essere fermati, in ordine di priorità
-# Primo = più conveniente fermare (facile → medio → difficile)
-stop_order:
-  # ── Facili (batch/differibili, nessun impatto utente) ──
-  - jellyseer
-  - lidarr
-  - sonarr
-  - sonarr-anime
-  - prowlarr
-  - radarr
-  - recyclarr
-  - stash
-  - gramps
-  - warracker
-  - cleanuparr
-  - airtrail
-  - trip
-  # ── Medi (servizi attivi ma non critici) ──
-  - qbittorrent
-  - suwayomi
-  - suwayomi-nsfw
-  - interesting-items
-  - romm
-  # ── Difficili (servizi che vuoi tenere su il più possibile) ──
-  - langfuse
-  - jellyfin
-  # MAI fermare: nextcloud, vikunja, immich, hermes, glances, uptime-kuma, ecc.
-
-services:
-  jellyseer:
-    compose_dir: "/mnt/applicazioni/yml/docker/jellyseer"
-    compose_file: "docker-compose.yml"
-  lidarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/lidarr"
-    compose_file: "docker-compose.yml"
-  sonarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/sonarr"
-    compose_file: "docker-compose.yml"
-  sonarr-anime:
-    compose_dir: "/mnt/applicazioni/yml/docker/sonarr-anime"
-    compose_file: "docker-compose.yml"
-  prowlarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/prowlarr"
-    compose_file: "docker-compose.yml"
-  radarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/radarr"
-    compose_file: "docker-compose.yml"
-  recyclarr:
-    compose_dir: "/mnt/applicazioni/yml/docker/recyclarr"
-    compose_file: "docker-compose.yml"
-  stash:
-    compose_dir: "/mnt/applicazioni/yml/docker/stash"
-    compose_file: "docker-compose.yml"
-  gramps:
-    compose_dir: "/mnt/applicazioni/yml/docker/gramps"
-    compose_file: "docker-compose.yml"
-  warracker:
-    compose_dir: "/mnt/applicazioni/yml/docker/warracker"
-    compose_file: "docker-compose.yml"
-  cleanuparr:
-    compose_dir: "/mnt/applicazioni/yml/docker/cleanuparr"
-    compose_file: "docker-compose.yml"
-  airtrail:
-    compose_dir: "/mnt/applicazioni/yml/docker/airtrail"
-    compose_file: "docker-compose.yml"
-  trip:
-    compose_dir: "/mnt/applicazioni/yml/docker/trip"
-    compose_file: "docker-compose.yml"
-  qbittorrent:
-    compose_dir: "/mnt/applicazioni/yml/docker/qbittorrent"
-    compose_file: "docker-compose.yml"
-  suwayomi:
-    compose_dir: "/mnt/applicazioni/yml/docker/suwayomi"
-    compose_file: "docker-compose.yml"
-  suwayomi-nsfw:
-    compose_dir: "/mnt/applicazioni/yml/docker/suwayomi-nsfw"
-    compose_file: "docker-compose.yml"
-  interesting-items:
-    compose_dir: "/mnt/applicazioni/yml/docker/interesting-items"
-    compose_file: "docker-compose.yml"
-  romm:
-    compose_dir: "/mnt/applicazioni/yml/docker/romm"
-    compose_file: "docker-compose.yml"
-  langfuse:
-    compose_dir: "/mnt/applicazioni/yml/docker/langfuse"
-    compose_file: "docker-compose.yml"
-  jellyfin:
-    compose_dir: "/mnt/applicazioni/yml/docker/jellyfin"
-    compose_file: "docker-compose.yml"
+  window_sec: 120               # finestra media mobile: 2 min
+  stop_threshold: 80.0          # media > 80% → ferma un servizio
+  restart_threshold: 60.0       # media < 60% → puo' riavviare
+  check_interval_sec: 60        # esegui il loop ogni 60s
 
 recovery:
-  calm_duration_sec: 300       # 5 min di calma (media < 60%) prima di riavviare
-  restart_delay_sec: 300        # 5 min tra un riavvio e il successivo
-  restart_check_sec: 30         # controlla ogni 30s se la calma è mantenuta
+  calm_duration_sec: 300        # 5 min di calma prima del primo riavvio
+  restart_delay_sec: 300        # 5 min tra un riavvio e l'altro
+  restart_check_sec: 30         # controlla ogni 30s se la calma e' mantenuta
 
 telegram:
   enabled: true

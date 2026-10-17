@@ -1,0 +1,10 @@
+name: lidarr
+compose_dir: /mnt/applicazioni/yml/docker/lidarr
+compose_file: docker-compose.yml
+service_name:
+  - lidarr
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 20
+note: "container lidarr; DB nel compose condiviso postgres-arr"

@@ -1,0 +1,10 @@
+name: recyclarr
+compose_dir: /mnt/applicazioni/yml/docker/recyclarr
+compose_file: docker-compose.yml
+service_name:
+  - recyclarr-recyclarr-1
+can_stop: true
+can_restart: false
+one_shot: true
+priority: 70
+note: "batch da cron, nessun container residente: il downscaler non deve riavviarlo"

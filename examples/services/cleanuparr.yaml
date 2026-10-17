@@ -1,0 +1,10 @@
+name: cleanuparr
+compose_dir: /mnt/applicazioni/yml/docker/cleanuparr
+compose_file: docker-compose.yml
+service_name:
+  - cleanuparr
+can_stop: true
+can_restart: false
+one_shot: true
+priority: 80
+note: "batch da cron (container ricreato a ogni run): can_restart=false perche' non ha senso riavviarlo"

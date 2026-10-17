@@ -1,0 +1,9 @@
+name: stash
+compose_dir: /mnt/applicazioni/yml/docker/stash
+compose_file: docker-compose.yml
+service_name:
+  - stash-stash-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 90

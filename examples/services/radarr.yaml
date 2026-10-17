@@ -1,0 +1,10 @@
+name: radarr
+compose_dir: /mnt/applicazioni/yml/docker/radarr
+compose_file: docker-compose.yml
+service_name:
+  - radarr-radarr-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 60
+note: "container radarr-radarr-1; il DB e' nel compose condiviso postgres-arr (deve restare su)"

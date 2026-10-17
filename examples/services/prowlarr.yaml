@@ -1,0 +1,11 @@
+name: prowlarr
+compose_dir: /mnt/applicazioni/yml/docker/prowlarr
+compose_file: docker-compose.yml
+service_name:
+  - prowlarr
+  - prowlarr_flaresolverr
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 50
+note: "down spegne anche flaresolverr, che e' nello stesso compose e non e' un servizio a se'"

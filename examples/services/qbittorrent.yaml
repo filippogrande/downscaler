@@ -1,0 +1,9 @@
+name: qbittorrent
+compose_dir: /mnt/applicazioni/yml/docker/qbittorrent
+compose_file: docker-compose.yml
+service_name:
+  - qbittorrent-qbittorrent-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 140
