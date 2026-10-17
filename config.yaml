@@ -18,7 +18,6 @@ monitor:
 recovery:
   calm_duration_sec: 300        # 5 min di calma prima del primo riavvio
   restart_delay_sec: 300        # 5 min tra un riavvio e l'altro
-  restart_check_sec: 30         # controlla ogni 30s se la calma e' mantenuta
 
 telegram:
   enabled: true
