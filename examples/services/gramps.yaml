@@ -1,0 +1,10 @@
+name: gramps
+compose_dir: /mnt/applicazioni/yml/docker/gramps
+compose_file: docker-compose.yml
+service_name:
+  - gramps-grampsweb-1
+can_stop: false
+can_restart: false
+one_shot: false
+priority: 100
+note: "NESSUN container in esecuzione al 17/10/26 (solo la dir): can_stop/can_restart=false, da riabilitare quando gira"
