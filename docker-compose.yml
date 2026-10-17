@@ -3,16 +3,14 @@ services:
     build: .
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
-    # Job one-shot: lo lancia systemd con 'docker start -a' ogni 60s.
+    # Job one-shot. restart: 'no' perche' e' systemd a lanciarlo ogni 60s;
+    # NON usare always/unless-stopped: il container deve uscire a ogni giro,
+    # altrimenti il timer lo trova gia' in esecuzione e il lavoro non si fa.
     restart: "no"
     environment:
       # DRY_RUN=true → mostra cosa farebbe SENZA spegnere nulla.
       # Primo avvio: lascialo a true, poi passalo a false quando e' verificato.
       DRY_RUN: "${DRY_RUN:-true}"
-      GLANCES_URL: "${GLANCES_URL:-http://10.0.0.5:61208}"
-      TELEGRAM_ENABLED: "${TELEGRAM_ENABLED:-false}"
-      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
-      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     volumes:
       # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
       # E' un accesso equivalente a root al daemon: voluto e documentato.
