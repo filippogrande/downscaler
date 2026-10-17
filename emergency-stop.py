@@ -15,7 +15,10 @@ Config:
   /etc/emergency-stop/config.yaml        soglie, Glances, Telegram
   /etc/emergency-stop/services/<nome>.yaml  un file per servizio
 
-State: /tmp/emergency-stop-state.json
+State: /var/lib/emergency-stop/state.json
+
+Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
+senza toccare Docker ne lo stato.
 """
 
 import argparse
@@ -35,7 +38,7 @@ import yaml
 
 CONFIG_PATH = Path("/etc/emergency-stop/config.yaml")
 SERVICES_DIR = Path("/etc/emergency-stop/services")
-STATE_PATH = Path("/tmp/emergency-stop-state.json")
+STATE_PATH = Path("/var/lib/emergency-stop/state.json")
 LOG_PATH = Path("/var/log/emergency-stop.log")
 
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
@@ -52,6 +55,9 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger("emergency-stop")
+
+# Vero per l'intera durata del processo: in --dry-run non scriviamo stato
+DRY_RUN = False
 
 # ─── Config servizi ──────────────────────────────────────────────────────────
 
@@ -162,7 +168,10 @@ def validate_services(services: list[dict], config: dict) -> bool:
 
 def load_state() -> dict:
     if STATE_PATH.exists():
-        return json.loads(STATE_PATH.read_text())
+        try:
+            return json.loads(STATE_PATH.read_text())
+        except Exception as e:
+            log.error(f"Stato illeggibile ({STATE_PATH}: {e}), riparto da zero")
     return {
         "mode": "monitor",  # monitor | recovery
         "stopped_services": [],  # servizi spenti, in ordine di stop
@@ -174,12 +183,19 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
+    if DRY_RUN:
+        log.info("[dry-run] stato NON scritto")
+        return
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state, indent=2))
 
 # ─── Telegram ────────────────────────────────────────────────────────────────
 
 def send_telegram(message: str, config: dict):
-    """Invia notifica Telegram."""
+    """Invia notifica Telegram (mai in --dry-run)."""
+    if DRY_RUN:
+        log.info(f"[dry-run] notifica Telegram non inviata: {message[:60]!r}")
+        return
     tg = config.get("telegram", {})
     if not tg.get("enabled"):
         return
@@ -273,8 +289,11 @@ def _compose_cmd(service: dict) -> list[str]:
 
 
 def stop_service(service: dict) -> bool:
-    """Ferma un servizio con docker compose down."""
+    """Ferma un servizio con docker compose down (mai in --dry-run)."""
     cmd = _compose_cmd(service) + ["down"]
+    if DRY_RUN:
+        log.info(f"[dry-run] STOP: {service['name']} → {' '.join(cmd)}")
+        return True
     log.info(f"STOP: {service['name']} → {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
@@ -289,8 +308,11 @@ def stop_service(service: dict) -> bool:
 
 
 def start_service(service: dict) -> bool:
-    """Riaccende un servizio con docker compose up -d."""
+    """Riaccende un servizio con docker compose up -d (mai in --dry-run)."""
     cmd = _compose_cmd(service) + ["up", "-d"]
+    if DRY_RUN:
+        log.info(f"[dry-run] START: {service['name']} → {' '.join(cmd)}")
+        return True
     log.info(f"START: {service['name']} → {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
@@ -330,14 +352,19 @@ def update_window(window: deque, value: float, window_sec: int, sample_interval:
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
 def main():
+    global DRY_RUN
+
     parser = argparse.ArgumentParser(description="Emergency Stop")
     parser.add_argument("--validate", action="store_true", help="valida la configurazione e esci")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="mostra cosa farebbe, senza toccare Docker ne lo stato")
     args = parser.parse_args()
 
     if not CONFIG_PATH.exists():
         log.error(f"Config non trovato: {CONFIG_PATH}")
         sys.exit(1)
 
+    DRY_RUN = args.dry_run
     config = yaml.safe_load(CONFIG_PATH.read_text())
     services = load_services(SERVICES_DIR)
 
@@ -345,6 +372,9 @@ def main():
         sys.exit(0 if validate_services(services, config) else 1)
 
     state = load_state()
+
+    if DRY_RUN:
+        log.info("=== DRY-RUN: nessuna azione reale verra' eseguita ===")
 
     # ── Health check ────────────────────────────────────────────────────
     health_check(services, state)
@@ -455,15 +485,18 @@ def main():
 
             send_telegram(f"- {service['name']}", config)
 
-            time.sleep(30)
-            new_value = get_glances_metric(config)
-            if new_value is None:
-                log.error("Post-stop: metrica non leggibile, valuto al prossimo giro")
-                return
-            new_avg = update_window(window, new_value, window_sec, sample_interval)
-            state["metric_window"] = list(window)
-            save_state(state)
-            log.info(f"Post-stop {service['name']}: media={new_avg:.1f}")
+            if DRY_RUN:
+                log.info("[dry-run] nessun campionamento post-stop")
+            else:
+                time.sleep(30)
+                new_value = get_glances_metric(config)
+                if new_value is None:
+                    log.error("Post-stop: metrica non leggibile, valuto al prossimo giro")
+                    return
+                new_avg = update_window(window, new_value, window_sec, sample_interval)
+                state["metric_window"] = list(window)
+                save_state(state)
+                log.info(f"Post-stop {service['name']}: media={new_avg:.1f}")
 
             if new_avg < stop_threshold:
                 log.info(f"✓ Migliorato! Entro in recovery mode")
