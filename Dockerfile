@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 
 # Il downscaler deve poter scrivere il log nella directory bind-mountata
 # dal compose (/var/log/emergency-stop.log sull'host): gira come root.
