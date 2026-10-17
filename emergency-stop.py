@@ -40,7 +40,6 @@ LOG_PATH = Path("/var/log/emergency-stop.log")
 
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
-DEFAULT_SERVICE_NAME = "app"
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -82,7 +81,7 @@ def load_services(services_dir: Path) -> list[dict]:
             log.error(f"Config {path.name} ({raw['name']}): manca 'compose_dir'")
             continue
 
-        service_names = raw.get("service_name") or [raw.get("service_name", DEFAULT_SERVICE_NAME)]
+        service_names = raw.get("service_name") or [raw["name"]]
         if isinstance(service_names, str):
             service_names = [service_names]
 
@@ -132,7 +131,7 @@ def validate_services(services: list[dict], config: dict) -> bool:
             else:
                 print(f"  ✓ {name}: {s['compose_dir']} [{', '.join(s['service_names'])}] priority={s['priority']}")
 
-        running = running_containers(name)
+        running = running_containers(s["service_names"])
         if s["one_shot"]:
             print(f"    one_shot: non residente (container: {', '.join(running) if running else 'nessuno'})")
         elif not s["can_stop"] and not s["can_restart"]:
@@ -250,18 +249,21 @@ def get_glances_metric(config: dict) -> float | None:
 
 # ─── Docker ──────────────────────────────────────────────────────────────────
 
-def running_containers(name: str) -> list[str]:
-    """Nomi dei container in esecuzione che corrispondono al servizio `name`."""
+def running_containers(service_names: list[str]) -> list[str]:
+    """Container in esecuzione il cui nome e' in `service_names` (confronto esatto)."""
+    if not service_names:
+        return []
     ps = subprocess.run(
         ["docker", "ps", "--format", "{{.Names}}"],
         capture_output=True, text=True, timeout=10,
     )
-    return [line.strip() for line in ps.stdout.splitlines() if line.strip() == name]
+    wanted = set(service_names)
+    return [line.strip() for line in ps.stdout.splitlines() if line.strip() in wanted]
 
 
 def is_service_running(service: dict) -> bool:
     """True se almeno un container del servizio è in esecuzione."""
-    return bool(running_containers(service["name"]))
+    return bool(running_containers(service["service_names"]))
 
 
 def _compose_cmd(service: dict) -> list[str]:
@@ -352,7 +354,6 @@ def main():
     window_sec = config["monitor"]["window_sec"]
     stop_threshold = config["monitor"]["stop_threshold"]
     restart_threshold = config["monitor"]["restart_threshold"]
-    check_interval = config["monitor"]["check_interval_sec"]
     recovery_wait = config["recovery"]["calm_duration_sec"]
     restart_delay = config["recovery"]["restart_delay_sec"]
 
@@ -363,7 +364,7 @@ def main():
     metric_value = get_glances_metric(config)
     if metric_value is None:
         # Metrica non leggibile: non decidere nulla. Tornare 0.0 qui
-        # significherebbe "tutto ok", che è la bug originale.
+        # significherebbe "tutto ok", che era il bug originale.
         log.error("Salto questo giro: metrica non leggibile")
         return
 
@@ -426,13 +427,15 @@ def main():
         log.warning(f"ALLARME: media {avg:.1f} >= {stop_threshold}")
 
         stopped = set(state["stopped_services"])
+        failed = set(state.get("failed_stops", []))
         candidates = [
             s for s in services
-            if s["can_stop"] and not s["one_shot"] and s["name"] not in stopped
+            if s["can_stop"] and not s["one_shot"]
+            and s["name"] not in stopped and s["name"] not in failed
         ]
 
         if not candidates:
-            log.warning("Tutti i servizi candidati sono già spenti, niente da fare")
+            log.warning("Tutti i servizi candidati sono già spenti o falliti, niente da fare")
             return
 
         service = candidates[0]
@@ -447,6 +450,7 @@ def main():
             state["stopped_services"].append(service["name"])
             state["incident_services"].append(service["name"])
             state["last_alarm_time"] = now.isoformat()
+            state["failed_stops"] = [n for n in state.get("failed_stops", []) if n != service["name"]]
             save_state(state)
 
             send_telegram(f"- {service['name']}", config)
@@ -469,11 +473,11 @@ def main():
             else:
                 log.warning("Non migliora, prossimo giro proverò un altro servizio")
         else:
-            # Il servizio resta candidato: al prossimo giro se ne prova un altro
-            # senza bloccare l'intera lista.
+            # Il down fallisce: segna il servizio come fallito e al giro dopo
+            # prova il successivo, invece di bloccare l'intera lista.
             log.error(f"Stop {service['name']} fallito, il prossimo giro proverà il successivo")
             state.setdefault("failed_stops", []).append(service["name"])
-            state["failed_stops"] = state["failed_stops"][-10:]
+            state["failed_stops"] = state["failed_stops"][-20:]
             save_state(state)
     else:
         if state["stopped_services"]:
