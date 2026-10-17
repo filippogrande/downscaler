@@ -3,12 +3,19 @@ services:
     build: .
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
-    # 'no': e' un job one-shot, lo lancia systemd con 'docker start'.
+    # Job one-shot: lo lancia systemd con 'docker start -a' ogni 60s.
     restart: "no"
-    # Ha bisogno del daemon Docker per spegnere/riaccendere gli altri servizi.
-    # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
-    # E' un accesso equivalente a root, voluto e documentato.
+    environment:
+      # DRY_RUN=true → mostra cosa farebbe SENZA spegnere nulla.
+      # Primo avvio: lascialo a true, poi passalo a false quando e' verificato.
+      DRY_RUN: "${DRY_RUN:-true}"
+      GLANCES_URL: "${GLANCES_URL:-http://10.0.0.5:61208}"
+      TELEGRAM_ENABLED: "${TELEGRAM_ENABLED:-false}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     volumes:
+      # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
+      # E' un accesso equivalente a root al daemon: voluto e documentato.
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - ./config.yaml:/app/config.yaml:ro
       - ./services:/app/services:ro
