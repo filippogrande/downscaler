@@ -1,0 +1,12 @@
+name: suwayomi
+compose_dir: /mnt/applicazioni/yml/docker/suwayomi
+compose_file: docker-compose.yml
+service_name:
+  - suwayomi-sfw
+  - suwayomi-nsfw
+  - suwayomi-gluetun
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 150
+note: "sfw+nsfw e gluetun condiviso in UN compose: gestiti come unico servizio (giu' insieme)"
