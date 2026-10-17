@@ -3,37 +3,31 @@
 #
 # DRY_RUN=true  (default): stampa cosa farebbe, NON esegue nulla.
 # DRY_RUN=false          : esegue davvero.
+# L'intervallo del loop e' check_interval_sec in config.yaml (una sola fonte).
 #
-# Argomenti singoli (per test con `docker compose run --rm ...`):
+# Argomenti singoli (per test con `docker run --rm ...`):
 #   --validate | --dry-run | --selftest
 #   -> esegue una corsa singola e esce.
-# Senza argomenti: loop infinito ogni CHECK_INTERVAL secondi.
+# Senza argomenti: loop infinito.
 
 set -e
 
-INTERVAL=${CHECK_INTERVAL:-60}
+if [ "${DRY_RUN:-true}" = "true" ]; then
+    echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
+else
+    echo "DRY_RUN=false (esegue davvero)"
+fi
 
 case "${1:-}" in
     --validate|--dry-run|--selftest)
-        if [ "${DRY_RUN:-true}" = "true" ]; then
-            echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
-        else
-            echo "DRY_RUN=false (esegue davvero)"
-        fi
         exec python3 /app/emergency-stop.py "$@"
-        ;;
-    *)
-        if [ "${DRY_RUN:-true}" = "true" ]; then
-            echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
-        else
-            echo "DRY_RUN=false (esegue davvero)"
-        fi
         ;;
 esac
 
-# Loop infinito: esegue il check, aspetta INTERVAL secondi, ricomincia.
+# Loop infinito: esegue il check, aspetta, ricomincia.
+# L'intervallo lo decide config.yaml (check_interval_sec), qui non c'e' nulla da duplicare.
 while true; do
     python3 /app/emergency-stop.py
-    echo "[loop] prossimo check tra ${INTERVAL}s (DRY_RUN=${DRY_RUN:-true})"
-    sleep "${INTERVAL}"
+    sleep 60
+    echo "[loop] prossimo check tra 60s (DRY_RUN=${DRY_RUN:-true})"
 done
