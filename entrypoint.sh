@@ -4,29 +4,30 @@
 # DRY_RUN=true  (default): stampa cosa farebbe, NON esegue nulla.
 # DRY_RUN=false          : esegue davvero.
 #
-# Se passi --validate / --dry-run / --selftest come argomento:
-#   esegue una corsa singola (per test con `docker compose run --rm ...`)  
-# Altrimenti: loop infinito ogni INTERVAL secondi.
+# Argomenti singoli (per test con `docker compose run --rm ...`):
+#   --validate | --dry-run | --selftest
+#   -> esegue una corsa singola e esce.
+# Senza argomenti: loop infinito ogni CHECK_INTERVAL secondi.
 
 set -e
 
 INTERVAL=${CHECK_INTERVAL:-60}
 
-dry_run_info() {
-    if [ "${DRY_RUN:-true}" = "true" ]; then
-        echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
-    else
-        echo "DRY_RUN=false (esegue davvero — attenzione!)"
-    fi
-}
-
 case "${1:-}" in
     --validate|--dry-run|--selftest)
-        dry_run_info
+        if [ "${DRY_RUN:-true}" = "true" ]; then
+            echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
+        else
+            echo "DRY_RUN=false (esegue davvero)"
+        fi
         exec python3 /app/emergency-stop.py "$@"
         ;;
     *)
-        dry_run_info
+        if [ "${DRY_RUN:-true}" = "true" ]; then
+            echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
+        else
+            echo "DRY_RUN=false (esegue davvero)"
+        fi
         ;;
 esac
 
