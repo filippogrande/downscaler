@@ -1,0 +1,13 @@
+name: monitoring
+compose_dir: /mnt/applicazioni/yml/docker/monitoring
+compose_file: docker-compose.yml
+service_name:
+  - grafana
+  - cadvisor
+  - prometheus
+  - node-exporter
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Monitoring: spegnerlo perde metriche e dashboard"

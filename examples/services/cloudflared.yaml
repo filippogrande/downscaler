@@ -1,0 +1,10 @@
+name: cloudflared
+compose_dir: /mnt/applicazioni/yml/docker/cloudflared
+compose_file: docker-compose.yml
+service_name:
+  - cloudflared
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Cloudflare Tunnel: spegnerlo interrompe l'accesso esterno"

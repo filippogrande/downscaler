@@ -1,0 +1,10 @@
+name: dashboard
+compose_dir: /mnt/applicazioni/yml/docker/dashboard
+compose_file: docker-compose.yml
+service_name:
+  - dashboard-dashboard-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: ""

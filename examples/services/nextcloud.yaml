@@ -1,0 +1,13 @@
+name: nextcloud
+compose_dir: /mnt/applicazioni/yml/docker/nextcloud
+compose_file: docker-compose.yml
+service_name:
+  - nextcloud
+  - nexcloud-postgres
+  - nexcloud-redis
+  - collabora
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Nextcloud: include DB, redis e collabora; container postgres = nexcloud-postgres"

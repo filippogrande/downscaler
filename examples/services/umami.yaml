@@ -1,0 +1,11 @@
+name: umami
+compose_dir: /mnt/applicazioni/yml/docker/umami
+compose_file: docker-compose.yml
+service_name:
+  - umami
+  - umami-db
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Umami: include il DB nel compose"

@@ -1,0 +1,11 @@
+name: wordpress
+compose_dir: /mnt/applicazioni/yml/docker/wordpress
+compose_file: docker-compose.yml
+service_name:
+  - wordpress
+  - wordpress-db
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "WordPress ACE65: include il DB nel compose"

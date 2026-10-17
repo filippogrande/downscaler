@@ -1,0 +1,11 @@
+name: mail-archive
+compose_dir: /mnt/applicazioni/yml/docker/mail-archive
+compose_file: docker-compose.yml
+service_name:
+  - mail-archive-mailarchive-app-1
+  - mail-archive-postgres-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Mail archive: include il DB postgres nel compose"

@@ -1,0 +1,10 @@
+name: filippomoscatelli
+compose_dir: /mnt/applicazioni/yml/docker/filippomoscatelli
+compose_file: docker-compose.yml
+service_name:
+  - filippomoscatelli-cv-local
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Sito CV su Docker"

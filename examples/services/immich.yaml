@@ -1,0 +1,13 @@
+name: immich
+compose_dir: /mnt/applicazioni/yml/docker/immich
+compose_file: docker-compose.yml
+service_name:
+  - immich-server
+  - immich-machine-learning
+  - immich-postgres
+  - immich-redis
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Immich: include DB e ML nel compose"

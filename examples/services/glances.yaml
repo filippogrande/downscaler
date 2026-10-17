@@ -1,0 +1,10 @@
+name: glances
+compose_dir: /mnt/applicazioni/yml/docker/glances
+compose_file: docker-compose.yml
+service_name:
+  - glances
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Glances: spegnerlo impedisce al downscaler di leggere le metriche"

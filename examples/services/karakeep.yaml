@@ -1,0 +1,12 @@
+name: karakeep
+compose_dir: /mnt/applicazioni/yml/docker/karakeep
+compose_file: docker-compose.yml
+service_name:
+  - karakeep-meilisearch
+  - karakeep-web
+  - karakeep-chrome
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Karakeep: include meilisearch e chrome nel compose"
