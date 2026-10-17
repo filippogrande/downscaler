@@ -51,6 +51,30 @@ LOG_PATH = Path("/app/logs/emergency-stop.log")
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
 
+# Eccezioni del parsing YAML: safe_load alza queste (o una sottoclasse).
+# Catturarle esplicitamente invece di 'except Exception' evita di ingoiare
+# errori che non sono di parsing (es. un PermissionError sul file).
+YAML_ERRORS = (
+    yaml.YAMLError,
+    UnicodeDecodeError,
+    OSError,
+)
+
+# Eccezioni della lettura/scrittura JSON di stato.
+JSON_ERRORS = (
+    json.JSONDecodeError,
+    OSError,
+)
+
+# Eccezioni di rete: requests non e' importabile qui, quindi si usano le
+# classi base. ConnectionError/OSError coprono la stragrande maggior parte
+# dei casi (timeout, DNS, socket chiuso).
+NETWORK_ERRORS = (
+    requests.RequestException,
+    OSError,
+)
+
+
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
 def _setup_logging():
@@ -96,7 +120,7 @@ def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
     for path in sorted(services_dir.glob("*.yaml")):
         try:
             raw = yaml.safe_load(path.read_text())
-        except Exception as e:
+        except YAML_ERRORS as e:
             log.error(f"Config {path.name} non leggibile: {e}")
             continue
 
@@ -172,7 +196,7 @@ def check_service_files(services: list[dict], config: dict) -> bool:
         if s["compose_dir"].is_dir() and compose_file.is_file():
             check = subprocess.run(
                 ["docker", "compose", "-f", str(compose_file), "config", "-q"],
-                capture_output=True, text=True, timeout=60,
+                check=False, capture_output=True, text=True, timeout=60,
             )
             if check.returncode != 0:
                 print(f"  ✗ {name}: compose non valido: {check.stderr.strip()[:200]}")
@@ -182,22 +206,22 @@ def check_service_files(services: list[dict], config: dict) -> bool:
         if s["one_shot"]:
             print(f"    one_shot: non residente (container: {', '.join(running) if running else 'nessuno'})")
         elif not s["can_stop"] and not s["can_restart"]:
-            print(f"    skip: can_stop=false can_restart=false → non gestito")
+            print("    skip: can_stop=false can_restart=false → non gestito")
         elif not running:
             print(f"  ⚠ {name}: NESSUN container in esecuzione (atteso: {', '.join(s['service_names'])})")
             ok = False
 
-    print(f"\n=== Glances ===")
+    print("\n=== Glances ===")
     base_url = config.get("glances", {}).get("url", "")
     metric = config.get("monitor", {}).get("metric", "")
     if not base_url:
-        print(f"  ✗ glances.url mancante")
+        print("  ✗ glances.url mancante")
         ok = False
     else:
         print(f"  url: {base_url}  metrica: {metric}")
         value = get_glances_metric(config)
         if value is None:
-            print(f"  ✗ metrica non leggibile da Glances")
+            print("  ✗ metrica non leggibile da Glances")
             ok = False
         else:
             print(f"  ✓ valore attuale: {metric}={value:.1f}")
@@ -211,7 +235,7 @@ def load_state() -> dict:
     if STATE_PATH.exists():
         try:
             return json.loads(STATE_PATH.read_text())
-        except Exception as e:
+        except JSON_ERRORS as e:
             log.error(f"Stato illeggibile ({STATE_PATH}: {e}), riparto da zero")
     return {
         "mode": "monitor",  # monitor | recovery
@@ -250,7 +274,7 @@ def send_telegram(message: str, config: dict):
         resp = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
         resp.raise_for_status()
         log.info(f"Notifica Telegram inviata: {message[:50]}...")
-    except Exception as e:
+    except NETWORK_ERRORS as e:
         log.error(f"Errore invio Telegram: {e}")
 
 # ─── Glances ─────────────────────────────────────────────────────────────────
@@ -264,7 +288,7 @@ def _glances_get(base_url: str, path: str) -> dict | None:
         return resp.json()
     except requests.HTTPError as e:
         log.warning(f"Glances risponde {e.response.status_code} su {path}")
-    except Exception as e:
+    except NETWORK_ERRORS as e:
         log.warning(f"Glances non raggiungibile su {path}: {e}")
     return None
 
@@ -312,7 +336,7 @@ def running_containers(service_names: list[str]) -> list[str]:
         return []
     ps = subprocess.run(
         ["docker", "ps", "--format", "{{.Names}}"],
-        capture_output=True, text=True, timeout=10,
+        check=False, capture_output=True, text=True, timeout=10,
     )
     wanted = set(service_names)
     return [line.strip() for line in ps.stdout.splitlines() if line.strip() in wanted]
@@ -336,7 +360,7 @@ def stop_service(service: dict) -> bool:
         log.info(f"[dry-run] STOP: {service['name']} → {' '.join(cmd)}")
         return True
     log.info(f"STOP: {service['name']} → {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
         log.error(f"Errore stop {service['name']}: {result.stderr}")
         return False
@@ -355,7 +379,7 @@ def start_service(service: dict) -> bool:
         log.info(f"[dry-run] START: {service['name']} → {' '.join(cmd)}")
         return True
     log.info(f"START: {service['name']} → {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
         log.error(f"Errore start {service['name']}: {result.stderr}")
         return False
@@ -557,7 +581,7 @@ def main():
                 log.info(f"Post-stop {service['name']}: media={new_avg:.1f}")
 
             if new_avg < stop_threshold:
-                log.info(f"✓ Migliorato! Entro in recovery mode")
+                log.info("✓ Migliorato! Entro in recovery mode")
                 state["mode"] = "recovery"
                 state["recovery_started_at"] = now.isoformat()
                 save_state(state)
