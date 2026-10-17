@@ -19,7 +19,9 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./services:/app/services:ro
       - state:/app/state
-      - /var/log/emergency-stop.log:/app/emergency-stop.log
+      # Nomi host e container DIVERSI: un bind di un file che non esiste sull'host
+      # crea una DIRECTORY dentro il container, e il log handler non la apre.
+      - /var/log/emergency-stop.log:/app/logs/emergency-stop.log
     logging:
       driver: json-file
       options:
