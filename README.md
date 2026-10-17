@@ -7,78 +7,99 @@ poi li riaccende gradualmente dopo 5 min di calma.
 ## Installazione
 
 ```bash
-# 1. Clona il repo
+# 1. Clona il repo (solo il codice)
 git clone https://github.com/filippogrande/downscaler.git /opt/emergency-stop
 
 # 2. Installa dipendenze
 pip3 install pyyaml requests
 
-# 3. Copia i file systemd
+# 3. Configura (FUORI dal repo: un git pull non le sovrascrive)
+sudo mkdir -p /etc/emergency-stop/services
+sudo cp /opt/emergency-stop/config.yaml /etc/emergency-stop/config.yaml
+sudo cp /opt/emergency-stop/examples/services/*.yaml /etc/emergency-stop/services/
+
+# 4. Valida la configurazione (dir, compose, nomi container, Glances)
+python3 /opt/emergency-stop/emergency-stop.py --validate
+
+# 5. Copia i file systemd e avvia
 sudo cp /opt/emergency-stop/emergency-stop.service /etc/systemd/system/
 sudo cp /opt/emergency-stop/emergency-stop.timer /etc/systemd/system/
-
-# 4. Abilita e avvia
 sudo systemctl daemon-reload
 sudo systemctl enable --now emergency-stop.timer
 ```
 
+**Sempre `--validate` dopo aver modificato un file di servizio**, prima di riavviare il timer.
+
 ## Configurazione
 
-Modifica `/opt/emergency-stop/config.yaml`:
+Due livelli, apposta separati:
+
+| File | Cosa contiene | Dove |
+|---|---|---|
+| `config.yaml` | soglie, Glances, Telegram, recovery | `/etc/emergency-stop/config.yaml` |
+| `services/<nome>.yaml` | un file per servizio | `/etc/emergency-stop/services/` |
+
+### config.yaml
+
 - `glances.url`: URL della tua istanza Glances
 - `monitor.metric`: `iowait` o `load`
 - `monitor.sample_interval_sec`: ogni quanto campionare (30s)
 - `monitor.window_sec`: finestra media mobile (120s = 2 min)
 - `monitor.stop_threshold`: media > 80% → ferma un servizio
 - `monitor.restart_threshold`: media < 60% → può riavviare
-- `stop_order`: lista servizi in ordine di priorità di stop
-- `services`: path dei compose file per ogni servizio
-- `recovery.calm_duration_sec`: 5 min di calma prima di riavviare
+- `recovery.calm_duration_sec`: 5 min di calma prima del primo riavvio
 - `recovery.restart_delay_sec`: 5 min tra un riavvio e l'altro
 - `telegram`: bot_token e chat_id per notifiche
 
-### Metriche Glances
+### File di servizio
 
-Da Glances 4.0 l'API è `/api/4/`: la vecchia `/api/3/` non esiste più
-(risponde `404 {"detail":"Not Found"}`) e il plugin `system` non espone
-più le metriche.
+Un file per servizio, `/etc/emergency-stop/services/<nome>.yaml`:
 
-- `iowait` → `GET /api/4/cpu`, campo `iowait`
-- `load` → `GET /api/4/load`, campo `min1`
-
-Il programma prova prima `/api/4/` e poi `/api/3/` (per Glances più vecchi).
-Se la metrica non è leggibile l'errore viene scritto nel log invece di
-passare in silenzio il valore `0.0`.
-
-Verifica l'endpoint prima di installare il servizio:
-
-```bash
-curl -s http://10.0.0.5:61208/api/4/cpu | head -c 200
+```yaml
+name: radarr
+compose_dir: /mnt/applicazioni/yml/docker/radarr
+compose_file: docker-compose.yml
+service_name:
+  - radarr-radarr-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 60
+note: "il DB e' nel compose condiviso postgres-arr, deve restare su"
 ```
 
-## Notifiche Telegram
+| Campo | Significato | Default |
+|---|---|---|
+| `name` | nome del servizio (usato in stato e notifiche). Deve corrispondere al **nome esatto** del container | obbligatorio |
+| `compose_dir` | directory del compose | obbligatorio |
+| `compose_file` | nome del compose | `docker-compose.yml` |
+| `service_name` | container da considerare (uno o più) | `app` |
+| `can_stop` | il downscaler può fermarlo | `true` |
+| `can_restart` | il downscaler può riaccenderlo | `true` |
+| `one_shot` | batch da cron, nessun container residente | `false` |
+| `priority` | ordine di stop (più basso = prima) | `100` |
+| `note` | libera, documenta la scelta | vuota |
 
-Il sistema invia notifiche precise:
+**Perché `can_stop` e `can_restart` sono separati:**
 
-```
-🚨 inizio downscale
-- jellyseer
-- lidarr
-- sonarr
+- `can_stop: false` → non lo tira giù, ma il health-check può riaccenderlo
+- `can_restart: false` → può tirarlo giù, ma il health-check non lo riaccende
 
-🔄 inizio recovery
-+ sonarr
-+ lidarr
-+ jellyseer
+Un solo `enabled: false` creerebbe un buco: il servizio finirebbe in `stopped_services`
+e non verrebbe mai più riacceso.
 
-✅ fine incidente
-durata: 23 minuti
-servizi fermati: 3
-```
+**`one_shot`** è per i servizi da cron (`recyclarr`, `cleanuparr`): non hanno un
+container residente, quindi il health-check non deve riavviarli ogni 60s.
+
+**Suwayomi** è un unico servizio (`suwayomi`): sfw, nsfw e gluetun condividono
+lo stesso compose e vanno giù insieme.
 
 ## Comandi utili
 
 ```bash
+# Valida config, compose e nomi container
+python3 /opt/emergency-stop/emergency-stop.py --validate
+
 # Vedi i log
 journalctl -u emergency-stop.service -f
 
@@ -92,15 +113,28 @@ sudo systemctl restart emergency-stop.timer
 python3 /opt/emergency-stop/emergency-stop.py
 ```
 
+## Metriche Glances
+
+Da Glances 4.0 l'API è `/api/4/`: la vecchia `/api/3/` non esiste più
+(risponde `404 {"detail":"Not Found"}`) e il plugin `system` non espone
+più le metriche.
+
+- `iowait` → `GET /api/4/cpu`, campo `iowait`
+- `load` → `GET /api/4/load`, campo `min1`
+
+Il programma prova prima `/api/4/` e poi `/api/3/` (per Glances più vecchi).
+Se la metrica non è leggibile il giro viene **saltato** e l'errore va in log:
+non viene più usato `0.0` (= tutto ok).
+
 ## Come funziona
 
-1. **Health check**: ogni 60s verifica che tutti i servizi in `stop_order` siano attivi. Se uno è down e non è stato spento dal sistema, lo riavvia.
-2. **Media mobile**: campiona iowait ogni 30s, calcola la media su finestra di 2 min.
-3. **Isteresi**: stop se media > 80%, restart se media < 60%.
-4. **Stop graduale**: ferma un servizio alla volta, aspetta 30s, verifica miglioramento.
-5. **Recovery graduale**: 5 min di calma (media < 60%) → riavvia un servizio → altri 5 min → riavvia il successivo.
+1. **Health check**: ogni 60s verifica i servizi residenti non spenti dal sistema e li riavvia (salta one-shot e `can_restart: false`).
+2. **Media mobile**: campiona iowait ogni 30s, media su finestra di 2 min.
+3. **Isteresi**: stop se media > 80%.
+4. **Stop graduale**: ferma un servizio alla volta; se il down fallisce, il giro dopo prova il successivo.
+5. **Recovery**: 5 min di calma **con media < restart_threshold** → riavvia un servizio → altri 5 min → il successivo.
 
 ## Servizi mai fermati
 
-I servizi non in `stop_order` non vengono mai toccati.
+I servizi non in `services/` non vengono toccati.
 Attualmente esclusi: Nextcloud, Vikunja, Immich, Hermes, Glances, Uptime Kuma, ecc.
