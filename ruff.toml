@@ -3,13 +3,16 @@
 # Sintassi [lint]: ruff depreca le opzioni top-level (extend-select,
 # ignore, per-file-ignores) in favore della sezione [lint].
 #
-# Le eccezioni per codice stanno in per-file-ignores, non in ignore
-# globale: un ignore globale toglierebbe la regola anche ai test, dove
-# invece serve.
+# Le eccezioni per file stanno in per-file-ignores, non in ignore globale:
+# un ignore globale toglierebbe la regola anche ai test, dove invece serve.
 #
-# Nota: ogni codice elencato qui e' stato visto nell'output di ruff.
-# Un selettore inesistente (es. DAR, SUB) fa fallire ruff con exit 2,
-# quindi non si aggiunge un codice 'per sicurezza'.
+# Ogni codice elencato qui e' stato letto nell'output di ruff: un selettore
+# inesistente (es. DAR, SUB) fa fallire ruff con exit 2, quindi non si
+# aggiunge un codice 'per sicurezza'.
+#
+# emergency-stop.py e' codice preesistente: le regole attive si limitano a
+# cio' che questa PR ha introdotto. I preesistenti restano spenti finche'
+# non si sistemano, elencati in fondo a questa sezione.
 
 target-version = "py312"
 
@@ -34,7 +37,7 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-# emergency-stop.py: codice preesistente, non sistemato da questa PR.
+# emergency-stop.py — codice preesistente, non sistemato da questa PR.
 # EXE001 non e' risolvibile: i permessi del file non sono impostabili
 # via GitHub MCP.
 "emergency-stop.py" = [
@@ -57,11 +60,31 @@ ignore = [
     "FBT",
     # f-string senza placeholder
     "F541",
+    # Docstring non standard (D213 e' in conflitto con D212 globale)
+    "D",
+    # Complessita' delle funzioni preesistenti
+    "C901",
+    "PLR0912",
+    "PLR0915",
+    # Annotazioni di ritorno su funzioni che non ritornano nulla
+    "ANN201",
+    "ANN202",
+    # datetime.now() senza tz: il codice usa l'ora locale di sistema
+    "DTZ005",
+    # else+if annidato: refactor non necessario per questa PR
+    "PLR5501",
+    # global statement: DRY_RUN e' letto da piu' punti del modulo
+    "PLW0603",
+    # concatenazione di liste (stile preesistente)
+    "RUF005",
+    # nota di copyright: il repo non la usa
+    "CPY001",
 ]
 
-# tests/: i test usano fixture di pytest, nomi volutamente semplici e
-# funzioni senza return type (pytest li gestisce).
+# tests/ — i test usano assert (e' il loro scopo), fixture di pytest,
+# nomi volutamente semplici e funzioni senza return type.
 "tests/*" = [
+    "S101",
     "ANN",
     "ANN201",
     "ANN202",
@@ -74,4 +97,5 @@ ignore = [
     "PTH",
     "SLF",
     "INP",
+    "CPY001",
 ]
