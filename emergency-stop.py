@@ -41,7 +41,7 @@ from pathlib import Path
 import requests
 import yaml
 
-# ─── Config ───────────────────────────────────────────────────────────────────
+# ─── Config ───────────────────────────────────────────────────────────────
 
 # I path si leggono da env perche' _setup_logging() gira a import: i test
 # impostano EMERGENCY_STOP_LOG_PATH prima di caricare questo modulo.
@@ -76,7 +76,7 @@ NETWORK_ERRORS = (
 )
 
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
+# ─── Logging ───────────────────────────────────────────────────────────────
 
 def _setup_logging():
     """Configura il logging su file e stdout.
@@ -115,11 +115,11 @@ log = logging.getLogger("emergency-stop")
 # --dry-run si puo' attivare da env (DRY_RUN=true nel compose).
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes", "on")
 
-# ─── Config servizi ──────────────────────────────────────────────────────────
+# ─── Config servizi ────────────────────────────────────────────────────────
 
 
 def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
-    """Legge i file di servizio e li ordina per priorità (più bassa = prima)."""
+    """Legge i file di servizio e li ordina per priorita' (piu' bassa = prima)."""
     if not services_dir.is_dir():
         if log_missing:
             log.error(f"Directory servizi non trovata: {services_dir}")
@@ -190,13 +190,13 @@ def check_service_files(services: list[dict], config: dict) -> bool:
         name = s["name"]
         compose_file = s["compose_dir"] / s["compose_file"]
         if not s["compose_dir"].is_dir():
-            print(f"  ✗ {name}: compose_dir non esiste ({s['compose_dir']})")
+            print(f"  X {name}: compose_dir non esiste ({s['compose_dir']})")
             ok = False
         elif not compose_file.is_file():
-            print(f"  ✗ {name}: compose file non trovato ({compose_file})")
+            print(f"  X {name}: compose file non trovato ({compose_file})")
             ok = False
         else:
-            print(f"  ✓ {name}: {s['compose_dir']} [{', '.join(s['service_names'])}] priority={s['priority']}")
+            print(f"  OK {name}: {s['compose_dir']} [{', '.join(s['service_names'])}] priority={s['priority']}")
 
         if selftest:
             # Senza Docker si controlla solo che i path esistano
@@ -208,7 +208,7 @@ def check_service_files(services: list[dict], config: dict) -> bool:
                 check=False, capture_output=True, text=True, timeout=60,
             )
             if check.returncode != 0:
-                print(f"  ✗ {name}: compose non valido: {check.stderr.strip()[:200]}")
+                print(f"  X {name}: compose non valido: {check.stderr.strip()[:200]}")
                 ok = False
 
         running = running_containers(s["service_names"])
@@ -217,28 +217,28 @@ def check_service_files(services: list[dict], config: dict) -> bool:
         elif not s["can_stop"] and not s["can_restart"]:
             print("    skip: can_stop=false can_restart=false → non gestito")
         elif not running:
-            print(f"  ⚠ {name}: NESSUN container in esecuzione (atteso: {', '.join(s['service_names'])})")
+            print(f"  ! {name}: NESSUN container in esecuzione (atteso: {', '.join(s['service_names'])})")
             ok = False
 
     print("\n=== Glances ===")
     base_url = config.get("glances", {}).get("url", "")
     metric = config.get("monitor", {}).get("metric", "")
     if not base_url:
-        print("  ✗ glances.url mancante")
+        print("  X glances.url mancante")
         ok = False
     else:
         print(f"  url: {base_url}  metrica: {metric}")
         value = get_glances_metric(config)
         if value is None:
-            print("  ✗ metrica non leggibile da Glances")
+            print("  X metrica non leggibile da Glances")
             ok = False
         else:
-            print(f"  ✓ valore attuale: {metric}={value:.1f}")
+            print(f"  OK valore attuale: {metric}={value:.1f}")
 
     print(f"\n=== Esito: {'OK' if ok else 'ERRORI'} ===")
     return ok
 
-# ─── State ───────────────────────────────────────────────────────────────────
+# ─── State ─────────────────────────────────────────────────────────────────
 
 def load_state() -> dict:
     if STATE_PATH.exists():
@@ -263,7 +263,7 @@ def save_state(state: dict):
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state, indent=2))
 
-# ─── Telegram ────────────────────────────────────────────────────────────────
+# ─── Telegram ──────────────────────────────────────────────────────────────
 
 def send_telegram(message: str, config: dict):
     """Invia notifica Telegram (mai in --dry-run)."""
@@ -286,7 +286,7 @@ def send_telegram(message: str, config: dict):
     except NETWORK_ERRORS as e:
         log.error(f"Errore invio Telegram: {e}")
 
-# ─── Glances ─────────────────────────────────────────────────────────────────
+# ─── Glances ───────────────────────────────────────────────────────────────
 
 def _glances_get(base_url: str, path: str) -> dict | None:
     """GET /api/<ver>/<path> su Glances. Ritorna il dict, o None se non raggiungibile."""
@@ -305,10 +305,10 @@ def _glances_get(base_url: str, path: str) -> dict | None:
 def get_glances_metric(config: dict) -> float | None:
     """Legge iowait o load da Glances API. None se non leggibile.
 
-    Da Glances 4.0 l'API è /api/4/ (la /api/3/ non esiste più: risponde
+    Da Glances 4.0 l'API e' /api/4/ (la /api/3/ non esiste piu': risponde
     404). I campi non stanno in `system`:
-      - iowait  → /api/4/cpu  (campo "iowait")
-      - load    → /api/4/load (campo "min1")
+      - iowait  -> /api/4/cpu  (campo "iowait")
+      - load    -> /api/4/load (campo "min1")
     """
     base_url = config["glances"]["url"]
     metric = config["monitor"]["metric"]
@@ -337,22 +337,48 @@ def get_glances_metric(config: dict) -> float | None:
     log.error(f"Impossibile leggere la metrica '{metric}' da Glances")
     return None
 
-# ─── Docker ──────────────────────────────────────────────────────────────────
+# ─── Docker ────────────────────────────────────────────────────────────────
+
+def _docker_available() -> bool:
+    """True se il CLI docker e' raggiungibile.
+
+    L'immagine deve installarlo (`apk add docker-cli`): senza il binario ogni
+    chiamata solleva FileNotFoundError e il container riparte in loop.
+    """
+    return Path("/usr/bin/docker").exists() or _which("docker") is not None
+
+
+def _which(program: str) -> str | None:
+    """Percorso dell'eseguibile in PATH, o None se assente."""
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(directory) / program
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
 
 def running_containers(service_names: list[str]) -> list[str]:
-    """Container in esecuzione il cui nome e' in `service_names` (confronto esatto)."""
+    """Container in esecuzione il cui nome e' in `service_names` (confronto esatto).
+
+    Senza CLI docker ritorna [] e lo segnala una volta: non e' un crash,
+    e' l'immagine sbagliata (manca docker-cli).
+    """
     if not service_names:
         return []
-    ps = subprocess.run(
-        ["docker", "ps", "--format", "{{.Names}}"],
-        check=False, capture_output=True, text=True, timeout=10,
-    )
+    try:
+        ps = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            check=False, capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError:
+        log.error("CLI docker non trovata nel container: serve `apk add docker-cli`")
+        return []
     wanted = set(service_names)
     return [line.strip() for line in ps.stdout.splitlines() if line.strip() in wanted]
 
 
 def is_service_running(service: dict) -> bool:
-    """True se almeno un container del servizio è in esecuzione."""
+    """True se almeno un container del servizio e' in esecuzione."""
     return bool(running_containers(service["service_names"]))
 
 
@@ -366,9 +392,9 @@ def stop_service(service: dict) -> bool:
     """Ferma un servizio con docker compose down (mai in --dry-run)."""
     cmd = _compose_cmd(service) + ["down"]
     if DRY_RUN:
-        log.info(f"[dry-run] STOP: {service['name']} → {' '.join(cmd)}")
+        log.info(f"[dry-run] STOP: {service['name']} -> {' '.join(cmd)}")
         return True
-    log.info(f"STOP: {service['name']} → {' '.join(cmd)}")
+    log.info(f"STOP: {service['name']} -> {' '.join(cmd)}")
     result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
         log.error(f"Errore stop {service['name']}: {result.stderr}")
@@ -377,7 +403,7 @@ def stop_service(service: dict) -> bool:
     if is_service_running(service):
         log.error(f"{service['name']} ancora attivo dopo down!")
         return False
-    log.info(f"✓ {service['name']} spento correttamente")
+    log.info(f"OK {service['name']} spento correttamente")
     return True
 
 
@@ -385,17 +411,17 @@ def start_service(service: dict) -> bool:
     """Riaccende un servizio con docker compose up -d (mai in --dry-run)."""
     cmd = _compose_cmd(service) + ["up", "-d"]
     if DRY_RUN:
-        log.info(f"[dry-run] START: {service['name']} → {' '.join(cmd)}")
+        log.info(f"[dry-run] START: {service['name']} -> {' '.join(cmd)}")
         return True
-    log.info(f"START: {service['name']} → {' '.join(cmd)}")
+    log.info(f"START: {service['name']} -> {' '.join(cmd)}")
     result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
         log.error(f"Errore start {service['name']}: {result.stderr}")
         return False
-    log.info(f"✓ {service['name']} riavviato")
+    log.info(f"OK {service['name']} riavviato")
     return True
 
-# ─── Health Check ────────────────────────────────────────────────────────────
+# ─── Health Check ──────────────────────────────────────────────────────────
 
 def health_check(services: list[dict], state: dict):
     """Riavvia servizi down che non sono stati spenti dal sistema.
@@ -410,10 +436,10 @@ def health_check(services: list[dict], state: dict):
         if service["name"] in stopped:
             continue
         if not is_service_running(service):
-            log.info(f"Health check: {service['name']} è down, lo riavvio")
+            log.info(f"Health check: {service['name']} e' down, lo riavvio")
             start_service(service)
 
-# ─── Media mobile ────────────────────────────────────────────────────────────
+# ─── Media mobile ──────────────────────────────────────────────────────────
 
 def update_window(window: deque, value: float, window_sec: int, sample_interval: int) -> float:
     """Aggiungi campione e calcola media mobile."""
@@ -423,7 +449,7 @@ def update_window(window: deque, value: float, window_sec: int, sample_interval:
         window.popleft()
     return sum(window) / len(window) if window else 0.0
 
-# ─── Main loop ───────────────────────────────────────────────────────────────
+# ─── Main loop ─────────────────────────────────────────────────────────────
 
 def main():
     global DRY_RUN
@@ -502,12 +528,12 @@ def main():
                 service_name = state["stopped_services"][-1]
                 service = next((s for s in services if s["name"] == service_name), None)
                 if service is None:
-                    log.error(f"Recovery: servizio {service_name} non più in config, lo scarto")
+                    log.error(f"Recovery: servizio {service_name} non piu' in config, lo scarto")
                     state["stopped_services"].pop()
                     save_state(state)
                     return
                 log.info(f"Recovery: riavvio {service_name}")
-                send_telegram(f"🔄 inizio recovery\n+ {service_name}", config)
+                send_telegram(f"INIZIO RECOVERY\n+ {service_name}", config)
                 if start_service(service):
                     state["stopped_services"].pop()
                     save_state(state)
@@ -521,7 +547,7 @@ def main():
                 duration_min = (incident_end - incident_start).total_seconds() / 60
                 num_services = len(state["incident_services"])
                 send_telegram(
-                    f"✅ fine incidente\n"
+                    f"FINE INCIDENTE\n"
                     f"durata: {duration_min:.0f} minuti\n"
                     f"servizi fermati: {num_services}",
                     config
@@ -551,7 +577,7 @@ def main():
         ]
 
         if not candidates:
-            log.warning("Tutti i servizi candidati sono già spenti o falliti, niente da fare")
+            log.warning("Tutti i servizi candidati sono gia' spenti o falliti, niente da fare")
             return
 
         service = candidates[0]
@@ -561,7 +587,7 @@ def main():
             if not state["stopped_services"]:
                 state["incident_start"] = now.isoformat()
                 state["incident_services"] = []
-                send_telegram("🚨 inizio downscale", config)
+                send_telegram("ALLARME: inizio downscale", config)
 
             state["stopped_services"].append(service["name"])
             state["incident_services"].append(service["name"])
@@ -590,25 +616,24 @@ def main():
                 log.info(f"Post-stop {service['name']}: media={new_avg:.1f}")
 
             if new_avg < stop_threshold:
-                log.info("✓ Migliorato! Entro in recovery mode")
+                log.info("Migliorato! Entro in recovery mode")
                 state["mode"] = "recovery"
                 state["recovery_started_at"] = now.isoformat()
                 save_state(state)
             else:
-                log.warning("Non migliora, prossimo giro proverò un altro servizio")
+                log.warning("Non migliora, prossimo giro provaro' un altro servizio")
         else:
             # Il down fallisce: segna il servizio come fallito e al giro dopo
             # prova il successivo, invece di bloccare l'intera lista.
-            log.error(f"Stop {service['name']} fallito, il prossimo giro proverà il successivo")
+            log.error(f"Stop {service['name']} fallito, il prossimo giro provaro' il successivo")
             state.setdefault("failed_stops", []).append(service["name"])
             state["failed_stops"] = state["failed_stops"][-20:]
             save_state(state)
-    else:
-        if state["stopped_services"]:
-            log.info("Media tornata sotto soglia, entro in recovery mode")
-            state["mode"] = "recovery"
-            state["recovery_started_at"] = now.isoformat()
-            save_state(state)
+    elif state["stopped_services"]:
+        log.info("Media tornata sotto soglia, entro in recovery mode")
+        state["mode"] = "recovery"
+        state["recovery_started_at"] = now.isoformat()
+        save_state(state)
 
 
 if __name__ == "__main__":
