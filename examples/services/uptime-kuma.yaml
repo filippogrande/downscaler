@@ -1,0 +1,10 @@
+name: uptime-kuma
+compose_dir: /mnt/applicazioni/yml/docker/uptime-kuma
+compose_file: docker-compose.yml
+service_name:
+  - uptime-kuma
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Uptime Kuma: monitor del downscaler"

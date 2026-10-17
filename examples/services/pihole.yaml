@@ -1,0 +1,10 @@
+name: pihole
+compose_dir: /mnt/applicazioni/yml/docker/pihole
+compose_file: docker-compose.yml
+service_name:
+  - pihole
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Pi-hole: spegnerlo interrompe il DNS della rete"

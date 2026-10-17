@@ -1,0 +1,13 @@
+name: firefly-iii
+compose_dir: /mnt/applicazioni/yml/docker/firefly-iii
+compose_file: docker-compose.yml
+service_name:
+  - firefly_iii_core
+  - firefly_iii_db
+  - firefly_iii_importer
+  - firefly_iii_cron
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 100
+note: "Firefly III: include DB, importer e cron nel compose"
