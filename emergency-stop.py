@@ -43,10 +43,12 @@ import yaml
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-CONFIG_PATH = Path("/app/config.yaml")
-SERVICES_DIR = Path("/app/services")
-STATE_PATH = Path("/app/state/state.json")
-LOG_PATH = Path("/app/logs/emergency-stop.log")
+# I path si leggono da env perche' _setup_logging() gira a import: i test
+# impostano EMERGENCY_STOP_LOG_PATH prima di caricare questo modulo.
+CONFIG_PATH = Path(os.environ.get("EMERGENCY_STOP_CONFIG", "/app/config.yaml"))
+SERVICES_DIR = Path(os.environ.get("EMERGENCY_STOP_SERVICES", "/app/services"))
+STATE_PATH = Path(os.environ.get("EMERGENCY_STOP_STATE", "/app/state/state.json"))
+LOG_PATH = Path(os.environ.get("EMERGENCY_STOP_LOG", "/app/logs/emergency-stop.log"))
 
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
@@ -66,9 +68,8 @@ JSON_ERRORS = (
     OSError,
 )
 
-# Eccezioni di rete: requests non e' importabile qui, quindi si usano le
-# classi base. ConnectionError/OSError coprono la stragrande maggior parte
-# dei casi (timeout, DNS, socket chiuso).
+# Eccezioni di rete: ConnectionError/OSError coprono la stragrande
+# maggior parte dei casi (timeout, DNS, socket chiuso).
 NETWORK_ERRORS = (
     requests.RequestException,
     OSError,
