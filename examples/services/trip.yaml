@@ -1,0 +1,9 @@
+name: trip
+compose_dir: /mnt/applicazioni/yml/docker/trip
+compose_file: docker-compose.yml
+service_name:
+  - trip-app-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 130
