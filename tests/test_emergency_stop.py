@@ -12,6 +12,7 @@ import importlib.util
 import json
 import logging
 import sys
+import tokenize
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
@@ -455,13 +456,24 @@ def test_recovery_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
     assert "load_media=5.0" in testo
 
 
+def _solo_codice(percorso: Path) -> str:
+    """Contenuto del file senza commenti ne stringhe (docstring incluse).
+
+    Il pattern vietato va cercato nel codice vero: la docstring di fmt_metric
+    lo cita per spiegare cosa NON fare, e sul testo grezzo farebbe scattare
+    un falso positivo.
+    """
+    with percorso.open(encoding="utf-8") as handle:
+        token = list(tokenize.generate_tokens(handle.readline))
+    saltati = (tokenize.COMMENT, tokenize.STRING)
+    return "".join(tok.string for tok in token if tok.type not in saltati)
+
+
 def test_nessun_format_specifier_con_condizione():
     """Un selettore di formato non puo' contenere una condizione.
 
-    Rete di sicurezza per il ramo post-stop, l'unico dei tre log che i test
-    funzionali non eseguono: se quel pattern torna, il container riparte in
-    restart loop.
+    Rete per il ramo post-stop, l'unico dei tre log che i test funzionali
+    non eseguono. Si guarda il codice, non il testo: la docstring di
+    fmt_metric cita il pattern per spiegarlo.
     """
-    sorgente = (REPO / "emergency-stop.py").read_text()
-
-    assert ".1f if " not in sorgente
+    assert ".1f if " not in _solo_codice(REPO / "emergency-stop.py")
