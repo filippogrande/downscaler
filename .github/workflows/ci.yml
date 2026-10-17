@@ -21,6 +21,12 @@ jobs:
           pip install -r requirements.txt
           pip install ruff pytest bandit
 
+      # Diagnostica: elenca i prefissi di regola ruff disponibili. Se un
+      # ruff.toml ha un selettore inesistente, la CI fallisce con un errore
+      # criptico (exit 2) e non si capisce quale codice e' sbagliato.
+      - name: ruff rule prefixes
+        run: ruff rule --all | grep -oE '^[A-Z]+[0-9]+' | sed 's/[0-9]*$//' | sort -u
+
       - name: Lint
         run: ruff check emergency-stop.py tests/
 
