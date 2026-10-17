@@ -7,26 +7,27 @@ poi li riaccende gradualmente dopo 5 min di calma.
 ## Installazione
 
 ```bash
-# 0. Clona il repo (SOLO se non esiste gia': /opt/emergency-stop)
-git clone https://github.com/filippogrande/downscaler.git /opt/emergency-stop
+# 0. Clona il repo (solo codice; stesso posto degli altri servizi)
+git clone https://github.com/filippogrande/downscaler.git /mnt/applicazioni/emergency-stop
 
 # 1. Dipendenze
+sudo apt install -y python3-pip
 pip3 install pyyaml requests
 
 # 2. Configura (FUORI dal repo: un git pull non la sovrascrive)
 sudo mkdir -p /etc/emergency-stop/services
-sudo cp /opt/emergency-stop/config.yaml /etc/emergency-stop/
-sudo cp /opt/emergency-stop/examples/services/*.yaml /etc/emergency-stop/services/
+sudo cp /mnt/applicazioni/emergency-stop/config.yaml /etc/emergency-stop/
+sudo cp /mnt/applicazioni/emergency-stop/examples/services/*.yaml /etc/emergency-stop/services/
 
 # 3. Valida la configurazione (dir, compose, nomi container, Glances)
-python3 /opt/emergency-stop/emergency-stop.py --validate
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
 
 # 4. Prova senza fare nulla: mostra cosa farebbe
-python3 /opt/emergency-stop/emergency-stop.py --dry-run
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
 
 # 5. Copia i file systemd e avvia
-sudo cp /opt/emergency-stop/emergency-stop.service /etc/systemd/system/
-sudo cp /opt/emergency-stop/emergency-stop.timer /etc/systemd/system/
+sudo cp /mnt/applicazioni/emergency-stop/emergency-stop.service /etc/systemd/system/
+sudo cp /mnt/applicazioni/emergency-stop/emergency-stop.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now emergency-stop.timer
 ```
@@ -34,15 +35,24 @@ sudo systemctl enable --now emergency-stop.timer
 **Ordine obbligato: `--validate`, poi `--dry-run`, poi il timer.**
 Mai abilitare il timer prima di aver visto un `--dry-run` pulito.
 
+### Se manca pip3
+
+```bash
+sudo apt install -y python3-pip
+```
+
+Il repo NON va in `/opt` (di root, non scrivibile senza sudo): sta in
+`/mnt/applicazioni/emergency-stop`, come tutti gli altri servizi.
+
 ## Le due modalita' di verifica
 
 ```bash
 # Controlla config, compose, nomi container, Glances. Non tocca nulla.
-python3 /opt/emergency-stop/emergency-stop.py --validate
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
 
 # Esegue la logica completa MA senza toccare Docker ne lo stato:
 # stampa '[dry-run] STOP: <servizio>' invece di fermarlo.
-python3 /opt/emergency-stop/emergency-stop.py --dry-run
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
 ```
 
 `--dry-run` legge lo stato esistente (quindi vede i servizi gia' fermati) ma **non lo
@@ -125,10 +135,10 @@ lo stesso compose e vanno giù insieme.
 
 ```bash
 # Valida config, compose e nomi container
-python3 /opt/emergency-stop/emergency-stop.py --validate
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
 
 # Mostra cosa farebbe, senza eseguire nulla
-python3 /opt/emergency-stop/emergency-stop.py --dry-run
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
 
 # Vedi i log
 journalctl -u emergency-stop.service -f
@@ -140,7 +150,7 @@ cat /var/lib/emergency-stop/state.json
 sudo systemctl restart emergency-stop.timer
 
 # Prova manualmente (esegue davvero)
-python3 /opt/emergency-stop/emergency-stop.py
+python3 /mnt/applicazioni/emergency-stop/emergency-stop.py
 ```
 
 ## Stato
