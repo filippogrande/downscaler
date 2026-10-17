@@ -20,7 +20,8 @@ Stato:   /var/lib/emergency-stop/state.json
 Log:     /var/log/emergency-stop.log
 
 Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
-senza toccare Docker ne lo stato.
+senza toccare Docker ne lo stato, --selftest prova i file di servizio
+senza Docker.
 """
 
 import argparse
@@ -64,18 +65,25 @@ DRY_RUN = False
 # ─── Config servizi ──────────────────────────────────────────────────────────
 
 
-def load_services(services_dir: Path) -> list[dict]:
+def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
     """Legge i file di servizio e li ordina per priorità (più bassa = prima)."""
     if not services_dir.is_dir():
-        log.error(f"Directory servizi non trovata: {services_dir}")
+        if log_missing:
+            log.error(f"Directory servizi non trovata: {services_dir}")
         return []
 
     services = []
     for path in sorted(services_dir.glob("*.yaml")):
         try:
-            raw = yaml.safe_load(path.read_text()) or {}
+            raw = yaml.safe_load(path.read_text())
         except Exception as e:
             log.error(f"Config {path.name} non leggibile: {e}")
+            continue
+
+        # Un .yaml vuoto da None: senza questo controllo il file sparirebbe
+        # in silenzio e il servizio non sarebbe mai gestito.
+        if raw is None:
+            log.error(f"Config {path.name}: VUOTO (0 byte) — il servizio non sara' gestito")
             continue
 
         if not isinstance(raw, dict):
@@ -111,9 +119,15 @@ def load_services(services_dir: Path) -> list[dict]:
     return services
 
 
-def validate_services(services: list[dict], config: dict) -> bool:
-    """Controlla i file di servizio. Ritorna True se tutto ok."""
+def check_service_files(services: list[dict], config: dict) -> bool:
+    """Controlla i file di servizio. Ritorna True se tutto ok.
+
+    Modalita' --selftest: solo file e nomi, niente Docker (il container non
+    ha il socket Docker, quindi non puo' elencare i container).
+    """
     ok = True
+    selftest = getattr(check_service_files, "selftest", False)
+
     if not services:
         print(f"NESSUN SERVIZIO in {SERVICES_DIR} (atteso: un file <nome>.yaml per servizio)")
         return False
@@ -129,6 +143,13 @@ def validate_services(services: list[dict], config: dict) -> bool:
             print(f"  ✗ {name}: compose file non trovato ({compose_file})")
             ok = False
         else:
+            print(f"  ✓ {name}: {s['compose_dir']} [{', '.join(s['service_names'])}] priority={s['priority']}")
+
+        if selftest:
+            # Senza Docker si controlla solo che i path esistano
+            continue
+
+        if s["compose_dir"].is_dir() and compose_file.is_file():
             check = subprocess.run(
                 ["docker", "compose", "-f", str(compose_file), "config", "-q"],
                 capture_output=True, text=True, timeout=60,
@@ -136,8 +157,6 @@ def validate_services(services: list[dict], config: dict) -> bool:
             if check.returncode != 0:
                 print(f"  ✗ {name}: compose non valido: {check.stderr.strip()[:200]}")
                 ok = False
-            else:
-                print(f"  ✓ {name}: {s['compose_dir']} [{', '.join(s['service_names'])}] priority={s['priority']}")
 
         running = running_containers(s["service_names"])
         if s["one_shot"]:
@@ -358,6 +377,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="Emergency Stop")
     parser.add_argument("--validate", action="store_true", help="valida la configurazione e esci")
+    parser.add_argument("--selftest", action="store_true",
+                        help="valida i file di servizio senza Docker (utile nel container)")
     parser.add_argument("--dry-run", action="store_true",
                         help="mostra cosa farebbe, senza toccare Docker ne lo stato")
     args = parser.parse_args()
@@ -370,8 +391,12 @@ def main():
     config = yaml.safe_load(CONFIG_PATH.read_text())
     services = load_services(SERVICES_DIR)
 
+    if args.selftest:
+        check_service_files.selftest = True
+        sys.exit(0 if check_service_files(services, config) else 1)
+
     if args.validate:
-        sys.exit(0 if validate_services(services, config) else 1)
+        sys.exit(0 if check_service_files(services, config) else 1)
 
     state = load_state()
 
