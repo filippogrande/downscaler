@@ -1,35 +1,71 @@
 # Ruff config per Emergency Stop
 #
-# Regole attive per tutto il repo (extend-select + default di ruff).
-# Le eccezioni stanno in per-file-ignores, non in ignore globale:
-# un ignore globale per codice (DTZ, TRY, EM, D...) toglierebbe la
-# regola anche ai test, dove invece serve.
-extend-select = ["ALL"]
-
-ignore = [
-    # E501: righe lunghe (il codice ha testi e messaggi lunghi, non blocca)
-    "E501",
-    # I: import non ordinati (non blocca la review)
-    "I",
-    # PLW: warning di design (es. PLW0603 global statement) — non blocca
-    "PLW",
-    # UP: suggerimenti di modernizzazione (typing moderno, ecc.)
-    "UP",
-]
+# Sintassi [lint]: ruff depreca le opzioni top-level (extend-select,
+# ignore, per-file-ignores) in favore della sezione [lint].
+#
+# Le eccezioni per codice stanno in per-file-ignores, non in ignore
+# globale: un ignore globale toglierebbe la regola anche ai test, dove
+# invece serve.
 
 target-version = "py312"
 
-[per-file-ignores]
+[lint]
+extend-select = ["ALL"]
+
+ignore = [
+    # E501: righe lunghe (messaggi di log e note, non blocca la review)
+    "E501",
+    # I: import non ordinati (non blocca la review)
+    "I",
+    # UP: suggerimenti di modernizzazione (typing moderno, pathlib, ...)
+    "UP",
+    # COM812: virgola finale mancante (gestione a carico di black/formatter)
+    "COM812",
+    # D203/D211 e D212/D213 sono coppie incompatibili: se ne tiene una
+    # sola per coppia, altrimenti ruff stampa un warning e ne ignora una.
+    "D203",
+    "D212",
+]
+
+[lint.per-file-ignores]
 # emergency-stop.py: codice preesistente, non sistemato da questa PR.
 # EXE001 non e' risolvibile: i permessi del file non sono impostabili
 # via GitHub MCP.
 "emergency-stop.py" = [
-    "EXE001", "DTZ", "ANN", "TRY", "PTH", "EM", "G", "S", "BLE", "TID",
-    "D", "FBT", "RUF", "PERF", "SIM", "RET", "ARG", "PT", "T20", "COM",
-    "Q", "ICN", "N", "A", "C4", "PD", "NPY", "AIR", "DJ", "INT", "PGH",
-    "PLC", "PLE", "PLR", "CPY", "DAR", "DOC", "ERA", "FA", "FIX", "FLY",
-    "FURB", "LOG", "PIE", "SLF", "SLOT", "TCH", "TD", "YTT", "ASYNC",
-    "B9", "C90", "T10", "INP", "ISC", "TC", "RSE", "TH", "PYI",
+    "EXE001",
+    # Typing moderno
+    "FA",
+    # Standard library typing (list[str] -> List[str])" ,
+    "UP006",
+    "UP007",
+    # Logging
+    "G",
+    "LOG",
+    # Security: subprocess senza shell=True (ok), banda bassa
+    "S603",
+    "S607",
+    # subprocess.check=False va bene per controllare il returncode
+    "PLW1510",
+    "SUB",
+    # Eccezioni ampie: il codice le cattura per degradare con un log
+    "BLE001",
+    "TRY",
+    "EM",
+    "FBT",
+    # f-string senza placeholder
+    "F541",
+    # Comandi docker in lista: ok (nessun shell)
+    "S603",
 ]
 # tests/: i test usano fixture di pytest e nomi volutamente semplici.
-"tests/*" = ["ANN", "ARG", "D", "PT", "PLC", "PLR", "PTH", "SLF", "INP"]
+"tests/*" = [
+    "ANN",
+    "ARG",
+    "D",
+    "PT",
+    "PLC",
+    "PLR",
+    "PTH",
+    "SLF",
+    "INP",
+]
