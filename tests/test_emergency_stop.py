@@ -10,6 +10,7 @@ al caricamento del modulo.
 
 import importlib.util
 import json
+import logging
 import sys
 from collections import deque
 from pathlib import Path
@@ -367,3 +368,64 @@ def test_nessun_compose_con_placeholder_nella_struttura():
     for name, service in services.items():
         assert "$" not in str(service.get("environment", {})), f"{name}: valori letterali, niente interpolazione"
         assert "build" not in service, f"{name}: deve solo pullare"
+
+
+# ─── Formattazione delle metriche nei log ───────────────────────────────────
+
+
+def test_fmt_metric_formatta_e_gestisce_il_mancante():
+    """0.0 e' un valore valido: non deve diventare 'N/A'."""
+    assert MODULE.fmt_metric(20.1) == "20.1"
+    assert MODULE.fmt_metric(0.0) == "0.0"
+    assert MODULE.fmt_metric(None) == "N/A"
+
+
+def test_allarme_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
+    """Il ramo di allarme deve scrivere il log, non sollevare ValueError.
+
+    Regressione verificata 17/10/26: i log di allarme/recovery/post-stop
+    contenevano la condizione dentro il format specifier (`{v:.1f if v ...}`),
+    che Python rifiuta. Il crash era nel ramo di allarme, cioe' proprio quando
+    il downscaler doveva spegnere un servizio.
+    """
+    servizio = {
+        "name": "radarr",
+        "compose_dir": Path("/x"),
+        "compose_file": "docker-compose.yml",
+        "service_names": ["radarr-radarr-1"],
+        "can_stop": True,
+        "can_restart": True,
+        "one_shot": False,
+        "priority": 60,
+        "note": "",
+    }
+
+    monkeypatch.setattr(MODULE, "CONFIG_PATH", REPO / "config.yaml")
+    monkeypatch.setattr(MODULE, "STATE_PATH", tmp_path / "state.json")
+    monkeypatch.setattr(MODULE, "running_containers", lambda names: [])
+    monkeypatch.setattr(MODULE, "load_services", lambda directory: [servizio])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["emergency-stop", "--dry-run", "--simulate-iowait", "5", "--simulate-load", "430"],
+    )
+
+    with caplog.at_level(logging.INFO, logger="emergency-stop"):
+        MODULE.main()  # non deve sollevare
+
+    testo = caplog.text
+    assert "ALLARME: iowait_media=5.0" in testo
+    assert "load_media=430.0" in testo
+    # anche il log post-stop passa da fmt_metric: non deve esplodere
+    assert "Post-stop radarr: iowait_media=5.0, load_media=430.0" in testo
+
+
+def test_nessun_format_specifier_con_condizione():
+    """Un selettore di formato non puo' contenere una condizione.
+
+    Rete di sicurezza: il fix e' in fmt_metric(), ma se un log futuro
+    reintroduce `{v:.1f if ...}` il container torna al restart loop.
+    """
+    sorgente = (REPO / "emergency-stop.py").read_text()
+
+    assert ".1f if " not in sorgente
