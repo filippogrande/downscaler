@@ -3,14 +3,12 @@ services:
     build: .
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
-    # Job one-shot. restart: 'no' perche' e' systemd a lanciarlo ogni 60s;
-    # NON usare always/unless-stopped: il container deve uscire a ogni giro,
-    # altrimenti il timer lo trova gia' in esecuzione e il lavoro non si fa.
-    restart: "no"
+    # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh):
+    # attenzione: DRY_RUN=true (default) non ferma/spegne NIENTE.
+    restart: unless-stopped
     environment:
-      # DRY_RUN=true → mostra cosa farebbe SENZA spegnere nulla.
-      # Primo avvio: lascialo a true, poi passalo a false quando e' verificato.
       DRY_RUN: "${DRY_RUN:-true}"
+      CHECK_INTERVAL: "${CHECK_INTERVAL:-60}"
     volumes:
       # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
       # E' un accesso equivalente a root al daemon: voluto e documentato.
