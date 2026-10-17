@@ -1,0 +1,27 @@
+services:
+  emergency-stop:
+    build: .
+    image: filippogrande/downscaler:latest
+    container_name: emergency-stop
+    # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh):
+    # attenzione: DRY_RUN=true (default) non ferma/spegne NIENTE.
+    restart: unless-stopped
+    environment:
+      DRY_RUN: "${DRY_RUN:-true}"
+      CHECK_INTERVAL: "${CHECK_INTERVAL:-60}"
+    volumes:
+      # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
+      # E' un accesso equivalente a root al daemon: voluto e documentato.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ./config.yaml:/app/config.yaml:ro
+      - ./services:/app/services:ro
+      - state:/app/state
+      - /var/log/emergency-stop.log:/app/emergency-stop.log
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  state:

@@ -5,12 +5,9 @@ Wants=docker.service
 
 [Service]
 Type=oneshot
-# Verifica le dipendenze PRIMA di eseguire: senza questo, se requests/yaml
-# mancano ogni run fallisce con ModuleNotFoundError e il timer va in errore.
-ExecStartPre=/usr/bin/python3 -c "import requests, yaml"
-ExecStart=/usr/bin/python3 /opt/emergency-stop/emergency-stop.py
+# Job one-shot: systemd lancia il container, il timer lo richiama ogni 60s.
+ExecStart=/usr/bin/docker start -a emergency-stop
 User=root
-WorkingDirectory=/etc/emergency-stop
 
 [Install]
 WantedBy=multi-user.target
