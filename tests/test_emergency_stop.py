@@ -14,7 +14,7 @@ import logging
 import sys
 import tokenize
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -493,7 +493,7 @@ def test_collect_incident_snapshot_salva_log_e_metriche(tmp_path, monkeypatch):
         "incident_services": ["radarr"],
     }
 
-    now = datetime(2026, 10, 17, 22, 30, 15)
+    now = datetime(2026, 10, 17, 22, 30, 15, tzinfo=timezone.utc)
     result = MODULE.collect_incident_snapshot(config, services, state, now, "start")
 
     expected = tmp_path / "incidents" / "2026-10-17_22-30-15"
@@ -509,7 +509,7 @@ def test_collect_incident_snapshot_salva_log_e_metriche(tmp_path, monkeypatch):
 def test_collect_incident_snapshot_disabilitato_non_fa_nulla(tmp_path, monkeypatch):
     """Con incidents.enabled false, non salva nulla."""
     config = {"incidents": {"enabled": False, "dir": str(tmp_path)}}
-    result = MODULE.collect_incident_snapshot(config, [], {}, datetime(2026, 1, 1), "start")
+    result = MODULE.collect_incident_snapshot(config, [], {}, datetime(2026, 1, 1, tzinfo=timezone.utc), "start")
     assert result is None
     assert not (tmp_path / "2026-01-01_00-00-00").exists()
 
@@ -535,12 +535,12 @@ def test_send_incident_report_manda_telegram(tmp_path, monkeypatch):
     assert str(snapshot_dir) in calls[0]
 
 
-def test_send_incident_report_disabilitato_non_manda_nulla(monkeypatch):
+def test_send_incident_report_disabilitato_non_manda_nulla(tmp_path, monkeypatch):
     """Con incidents.telegram_report false, non invia nulla."""
     calls = []
     monkeypatch.setattr(MODULE, "send_telegram", lambda msg, config: calls.append(msg))
 
     config = {"incidents": {"telegram_report": False}}
-    MODULE.send_incident_report(Path("/tmp/x"), {}, config)
+    MODULE.send_incident_report(tmp_path, {}, config)
 
     assert calls == []
