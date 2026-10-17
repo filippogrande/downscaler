@@ -1,13 +1,14 @@
 services:
   emergency-stop:
-    build: .
+    # SOLO pull da Docker Hub: l'immagine la builda GitHub Actions a ogni merge
+    # su main (workflow 'Docker Build & Push'). Nessun build locale.
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
     # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh).
     # DRY_RUN=true di default: non spegne/riaccende NIENTE, stampa solo cosa farebbe.
     restart: unless-stopped
     # Valori letterali, niente interpolazione ${...}.
-    # Per spegnerlo davvero: DRY_RUN: "false" qui, poi docker compose up -d.
+    # Per farlo lavorare davvero: DRY_RUN: "false" qui, poi docker compose up -d.
     environment:
       DRY_RUN: "true"
       CHECK_INTERVAL: "60"
