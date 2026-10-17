@@ -1,5 +1,15 @@
 # Ruff config per Emergency Stop
-# EXE001: lo script ha shebang ma il file non e' eseguibile nel repo.
-#        Non possiamo impostare i permessi via GitHub MCP, quindi lo ignoriamo.
-ignore = ["EXE001"]
+#
+# EXE001 (shebang presente ma file non eseguibile) non si puo' risolvere
+# qui: i permessi del file non sono impostabili via GitHub MCP.
+#
+# Attenzione: basta 'ignore = [...]' per disattivare tutte le altre
+# regole (comportamento di default di ruff). Per questo si usano
+# extend-select e per-file-ignores: le regole restano attive, e solo
+# EXE001 e' escluso per questo file.
+extend-select = ["ALL"]
+
 target-version = "py312"
+
+[per-file-ignores]
+"emergency-stop.py" = ["EXE001"]
