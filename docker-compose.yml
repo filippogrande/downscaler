@@ -4,14 +4,14 @@ services:
     # su main (workflow 'Docker Build & Push'). Nessun build locale.
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
-    # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh).
+    # Gira ininterrotto (loop dentro entrypoint.sh).
     # DRY_RUN=true di default: non spegne/riaccende NIENTE, stampa solo cosa farebbe.
     restart: unless-stopped
-    # Valori letterali, niente interpolazione ${...}.
+    # Valori letterali, niente interpolazione ${...}, nessun .env.
     # Per farlo lavorare davvero: DRY_RUN: "false" qui, poi docker compose up -d.
+    # L'intervallo del loop e' check_interval_sec in config.yaml (una sola fonte).
     environment:
       DRY_RUN: "true"
-      CHECK_INTERVAL: "60"
     volumes:
       # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
       # E' un accesso equivalente a root al daemon: voluto e documentato.
