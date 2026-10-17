@@ -18,6 +18,12 @@ else
     echo "DRY_RUN=false (esegue davvero)"
 fi
 
+# Il log lo scrive su un file bind-mountato dall'host. Se il file non esiste
+# sull'host, Docker crea una DIRECTORY dentro il container e il log handler
+# fallisce con IsADirectoryError: lo creiamo qui, prima del loop.
+mkdir -p /app/logs
+touch /app/logs/emergency-stop.log
+
 case "${1:-}" in
     --validate|--dry-run|--selftest)
         exec python3 /app/emergency-stop.py "$@"
