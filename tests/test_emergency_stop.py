@@ -9,6 +9,7 @@ al caricamento del modulo.
 """
 
 import importlib.util
+import json
 import sys
 from collections import deque
 from pathlib import Path
@@ -182,6 +183,74 @@ def test_is_service_running_true_con_un_container():
     assert MODULE.is_service_running(service) is True
 
 
+# ─── Default per chiavi mancanti ─────────────────────────────────────────────
+
+
+def test_config_vecchio_senza_chiavi_nuove():
+    """Un config senza le chiavi aggiunte dopo non deve sollevare KeyError.
+
+    Regressione verificata 17/10/26: il config locale non aveva
+    load_stop_threshold e il container partiva in restart loop.
+    """
+    config_vecchio = {
+        "glances": {"url": "http://10.0.0.5:61208"},
+        "monitor": {
+            "metric": "iowait",
+            "sample_interval_sec": 30,
+            "window_sec": 120,
+            "stop_threshold": 80.0,
+            "restart_threshold": 60.0,
+        },
+    }
+
+    merged = MODULE._merge_defaults(config_vecchio)
+
+    # le chiavi nuove prendono il default, non sollevano KeyError
+    assert merged["monitor"]["load_stop_threshold"] == 6.0
+    assert merged["monitor"]["load_restart_threshold"] == 4.0
+    # le chiavi presenti non vengono toccate
+    assert merged["monitor"]["stop_threshold"] == 80.0
+
+
+def test_stato_parziale_non_crasha():
+    """Uno stato scritto da una versione precedente non deve rompere il health check.
+
+    Regressione verificata 17/10/26: lo stato in dry-run aveva solo
+    metric_window, quindi mancava stopped_services.
+    """
+    stato_parziale = {"metric_window": [1.0, 2.0]}
+
+    normalized = MODULE._normalize_state(stato_parziale)
+
+    assert normalized["stopped_services"] == []
+    assert normalized["metric_window"] == [1.0, 2.0]
+    # il health check deve poterlo leggere senza KeyError
+    assert set(normalized["stopped_services"]) == set()
+
+
+def test_load_state_con_file_illeggibile(tmp_path, monkeypatch):
+    """Uno stato corrotto non deve bloccare il container."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text("{ non e' json")
+    monkeypatch.setattr(MODULE, "STATE_PATH", state_path)
+
+    state = MODULE.load_state()
+
+    assert state["mode"] == "monitor"
+    assert state["stopped_services"] == []
+
+
+def test_load_state_con_json_non_dict(tmp_path, monkeypatch):
+    """Un JSON valido ma non un object (es. una lista) non deve bloccare."""
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps([1, 2, 3]))
+    monkeypatch.setattr(MODULE, "STATE_PATH", state_path)
+
+    state = MODULE.load_state()
+
+    assert state["mode"] == "monitor"
+
+
 # ─── Immagine: dipendenze di sistema ─────────────────────────────────────────
 
 
@@ -240,6 +309,9 @@ def test_config_yaml_del_repo_e_valido():
     assert data["monitor"]["metric"] in ("iowait", "load")
     assert data["monitor"]["stop_threshold"] > data["monitor"]["restart_threshold"]
     assert data["monitor"]["window_sec"] > 0
+    # le chiavi nuove esistono nel config del repo (altrimenti il default le copre)
+    assert "load_stop_threshold" in data["monitor"]
+    assert "load_restart_threshold" in data["monitor"]
 
 
 def test_nessun_compose_con_placeholder_nella_struttura():

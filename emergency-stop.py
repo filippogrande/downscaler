@@ -57,6 +57,51 @@ LOG_PATH = Path(os.environ.get("EMERGENCY_STOP_LOG", "/app/logs/emergency-stop.l
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
 
+# ─── Default di configurazione ────────────────────────────────────────────
+#
+# Un config vecchio (manca una chiave aggiunta dopo) non deve far crashare
+# il container: le chiavi assenti prendono questi valori.
+# Fonte dell'errore che questo risolve: KeyError: 'load_stop_threshold'
+# e KeyError: 'stopped_services' (stato parziale scritto in dry-run).
+DEFAULTS = {
+    "monitor": {
+        "metric": "iowait",
+        "sample_interval_sec": 30,
+        "window_sec": 120,
+        "stop_threshold": 80.0,
+        "restart_threshold": 60.0,
+        "load_stop_threshold": 6.0,
+        "load_restart_threshold": 4.0,
+        "check_interval_sec": 60,
+    },
+    "recovery": {
+        "calm_duration_sec": 300,
+        "restart_delay_sec": 300,
+    },
+    "telegram": {
+        "enabled": False,
+        "bot_token": "",
+        "chat_id": "",
+    },
+    "glances": {
+        "url": "",
+    },
+}
+
+# Chiavi dello stato con il loro valore iniziale: uno stato parziale
+# (es. scritto in dry-run prima di questa regola) viene completato.
+STATE_DEFAULTS = {
+    "mode": "monitor",
+    "stopped_services": [],
+    "last_alarm_time": None,
+    "recovery_started_at": None,
+    "incident_start": None,
+    "incident_services": [],
+    "failed_stops": [],
+    "metric_window": [],
+    "metric_window_load": [],
+}
+
 # Eccezioni del parsing YAML: safe_load alza queste (o una sottoclasse).
 # Catturarle esplicitamente invece di 'except Exception' evita di ingoiare
 # errori che non sono di parsing (es. un PermissionError sul file).
@@ -78,6 +123,24 @@ NETWORK_ERRORS = (
     requests.RequestException,
     OSError,
 )
+
+
+def _merge_defaults(config: dict) -> dict:
+    """Rende il config tollerante alle chiavi mancanti (unione con DEFAULTS)."""
+    merged = {section: dict(values) for section, values in DEFAULTS.items()}
+    for section, values in config.items():
+        if isinstance(values, dict) and section in merged:
+            merged[section].update(values)
+        else:
+            merged[section] = values
+    return merged
+
+
+def _normalize_state(state: dict) -> dict:
+    """Completa uno stato parziale con le chiavi mancanti (STATE_DEFAULTS)."""
+    normalized = dict(STATE_DEFAULTS)
+    normalized.update(state)
+    return normalized
 
 
 # ─── Logging ───────────────────────────────────────────────────────────────
@@ -225,8 +288,8 @@ def check_service_files(services: list[dict], config: dict) -> bool:
             ok = False
 
     print("\n=== Glances ===")
-    base_url = config.get("glances", {}).get("url", "")
-    metric = config.get("monitor", {}).get("metric", "")
+    base_url = config["glances"]["url"]
+    metric = config["monitor"]["metric"]
     if not base_url:
         print("  X glances.url mancante")
         ok = False
@@ -247,31 +310,35 @@ def check_service_files(services: list[dict], config: dict) -> bool:
 # ─── State ─────────────────────────────────────────────────────────────────
 
 def load_state() -> dict:
+    """Carica lo stato, completando le chiavi mancanti.
+
+    Serve perche' uno stato scritto da una versione precedente (o in
+    dry-run) puo' non avere tutte le chiavi: senza questo completamento
+    il primo accesso solleva KeyError e il container va in loop.
+    """
+    state = dict(STATE_DEFAULTS)
     if STATE_PATH.exists():
         try:
-            return json.loads(STATE_PATH.read_text())
+            loaded = json.loads(STATE_PATH.read_text())
+            if isinstance(loaded, dict):
+                state.update(loaded)
+            else:
+                log.error(f"Stato non e' un JSON object ({STATE_PATH}), riparto da zero")
         except JSON_ERRORS as e:
             log.error(f"Stato illeggibile ({STATE_PATH}: {e}), riparto da zero")
-    return {
-        "mode": "monitor",  # monitor | recovery
-        "stopped_services": [],  # servizi spenti, in ordine di stop
-        "last_alarm_time": None,
-        "recovery_started_at": None,
-        "incident_start": None,
-        "incident_services": [],
-    }
+    return state
 
 
 def save_state(state: dict):
-    # In dry-run salviamo solo la finestra delle metriche (non lo stato operativo)
-    # cosi' la media mobile non riparte da zero a ogni giro.
+    """Salva lo stato.
+
+    In dry-run NON viene scritto: l'obiettivo del dry-run e' non toccare
+    nulla di persistente. La finestra delle metriche viene comunque
+    accumulata in memoria durante il giro, quindi la media mobile non
+    riparte da zero a ogni esecuzione.
+    """
     if DRY_RUN:
-        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps({
-            "metric_window": state.get("metric_window", []),
-            "metric_window_load": state.get("metric_window_load", []),
-        }, indent=2))
-        log.info("[dry-run] stato NON scritto (solo metric_window)")
+        log.info("[dry-run] stato NON scritto")
         return
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state, indent=2))
@@ -459,7 +526,7 @@ def health_check(services: list[dict], state: dict):
     Salta gli one-shot (batch da cron, non hanno un container residente)
     e quelli con can_restart: false.
     """
-    stopped = set(state["stopped_services"])
+    stopped = set(state.get("stopped_services", []))
     for service in services:
         if service["one_shot"] or not service["can_restart"]:
             continue
@@ -507,7 +574,7 @@ def main():
     if args.no_dry_run:
         DRY_RUN = False
 
-    config = yaml.safe_load(CONFIG_PATH.read_text())
+    config = _merge_defaults(yaml.safe_load(CONFIG_PATH.read_text()))
     services = load_services(SERVICES_DIR)
 
     if args.selftest:
@@ -517,7 +584,7 @@ def main():
     if args.validate:
         sys.exit(0 if check_service_files(services, config) else 1)
 
-    state = load_state()
+    state = _normalize_state(load_state())
 
     if DRY_RUN:
         log.info("=== DRY-RUN: nessuna azione reale verra' eseguita ===")
@@ -526,21 +593,18 @@ def main():
     health_check(services, state)
 
     # ── Campionamento ───────────────────────────────────────────────────
-    sample_interval = config["monitor"]["sample_interval_sec"]
-    window_sec = config["monitor"]["window_sec"]
-    stop_threshold = config["monitor"]["stop_threshold"]
-    restart_threshold = config["monitor"]["restart_threshold"]
-    load_stop_threshold = config["monitor"]["load_stop_threshold"]
-    load_restart_threshold = config["monitor"]["load_restart_threshold"]
+    monitor = config["monitor"]
+    sample_interval = monitor["sample_interval_sec"]
+    window_sec = monitor["window_sec"]
+    stop_threshold = monitor["stop_threshold"]
+    restart_threshold = monitor["restart_threshold"]
+    load_stop_threshold = monitor["load_stop_threshold"]
+    load_restart_threshold = monitor["load_restart_threshold"]
     recovery_wait = config["recovery"]["calm_duration_sec"]
     restart_delay = config["recovery"]["restart_delay_sec"]
 
-    if "metric_window" not in state:
-        state["metric_window"] = []
-    if "metric_window_load" not in state:
-        state["metric_window_load"] = []
-    window_iowait = deque(state["metric_window"])
-    window_load = deque(state["metric_window_load"])
+    window_iowait = deque(state.get("metric_window", []))
+    window_load = deque(state.get("metric_window_load", []))
 
     iowait_val, load_val = get_glances_metrics(config, args.simulate_iowait, args.simulate_load)
     if iowait_val is None and load_val is None:
@@ -624,7 +688,7 @@ def main():
     if iowait_alarm or load_alarm:
         log.warning(f"ALLARME: iowait_media={avg_iowait:.1f if avg_iowait else 'N/A'} (soglia {stop_threshold}), load_media={avg_load:.1f if avg_load else 'N/A'} (soglia {load_stop_threshold})")
 
-        stopped = set(state["stopped_services"])
+        stopped = set(state.get("stopped_services", []))
         failed = set(state.get("failed_stops", []))
         candidates = [
             s for s in services
