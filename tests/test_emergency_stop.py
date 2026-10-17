@@ -141,6 +141,32 @@ def test_running_containers_confronto_esatto(monkeypatch):
     assert MODULE.running_containers([]) == []
 
 
+def test_running_containers_non_crasha_senza_cli_docker(monkeypatch):
+    """Senza il binario docker nel PATH il modulo non deve crashare.
+
+    Regressione verificata 17/10/26: l'immagine non aveva docker-cli, quindi
+    `docker ps` sollevava FileNotFoundError e il container ripartiva in loop.
+    Il health check deve saltare il servizio, non portare giu' tutto.
+    """
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("[Errno 2] No such file or directory: 'docker'")
+
+    monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
+
+    assert MODULE.running_containers(["sonarr"]) == []
+
+
+def test_is_service_running_false_senza_cli_docker(monkeypatch):
+    """Senza CLI docker il servizio non e' 'in esecuzione': meglio non riavviarlo."""
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("[Errno 2] No such file or directory: 'docker'")
+
+    monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
+
+    service = {"name": "x", "service_names": ["x-app-1"]}
+    assert MODULE.is_service_running(service) is False
+
+
 def test_is_service_running_true_con_un_container():
     service = {"name": "x", "service_names": ["x-app-1"]}
 
@@ -150,6 +176,33 @@ def test_is_service_running_true_con_un_container():
 
     MODULE.running_containers = FakeContainers()
     assert MODULE.is_service_running(service) is True
+
+
+# ─── Immagine: dipendenze di sistema ─────────────────────────────────────────
+
+
+def test_il_dockerfile_installa_il_cli_docker():
+    """Il downscaler chiama il CLI docker: deve essere nell'immagine.
+
+    Senza `apk add docker-cli` il container parte in restart loop con
+    FileNotFoundError: 'docker' (verificato 17/10/26).
+    """
+    dockerfile = (REPO / "Dockerfile").read_text()
+
+    assert "docker-cli" in dockerfile, "il Dockerfile deve installare docker-cli"
+
+
+def test_il_compose_monta_il_socket_docker():
+    """Il CLI docker parla col daemon attraverso il socket montato dal compose."""
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    services = compose.get("services", {})
+
+    assert services, "il compose non definisce servizi"
+    for name, service in services.items():
+        mounts = service.get("volumes", []) or []
+        assert any("docker.sock" in str(m) for m in mounts), (
+            f"{name}: manca il mount del socket docker"
+        )
 
 
 # ─── Config d'esempio del repo ───────────────────────────────────────────────
