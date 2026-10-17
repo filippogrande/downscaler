@@ -1,9 +1,9 @@
 FROM python:3.12-alpine
 
-# Il downscaler gira come utente non-root; ha solo bisogno del socket Docker
-# (montato rw dal compose) e di scrivere stato/log su un volume.
-RUN adduser -D -u 1000 emergency
-
+# Il downscaler deve poter scrivere il log nella directory bind-mountata
+# dal compose (/var/log/emergency-stop.log sull'host): gira come root.
+# Nota: il socket Docker e' montato rw dal compose, quindi il processo ha
+# gia' un accesso equivalente a root al daemon. Non si aggiunge superficie.
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -11,5 +11,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY emergency-stop.py entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-USER emergency
 ENTRYPOINT ["/app/entrypoint.sh"]

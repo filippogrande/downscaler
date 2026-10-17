@@ -12,6 +12,12 @@
 
 set -e
 
+# Il log e' bind-mountato dall'host (vedi compose): se l'host non ha il file,
+# Docker crea una DIRECTORY e il log handler fallisce con IsADirectoryError.
+# Lo creiamo qui, prima di avviare Python.
+mkdir -p /app/logs
+touch /app/logs/emergency-stop.log
+
 if [ "${DRY_RUN:-true}" = "true" ]; then
     echo "DRY_RUN=true (solo simulazione, nessuna azione reale)"
 else
