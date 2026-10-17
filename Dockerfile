@@ -8,7 +8,8 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY emergency-stop.py ./
+COPY emergency-stop.py entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
 USER emergency
-ENTRYPOINT ["python", "emergency-stop.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
