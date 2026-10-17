@@ -485,8 +485,13 @@ def main():
 
             send_telegram(f"- {service['name']}", config)
 
+            new_avg = None
             if DRY_RUN:
+                # Senza un down reale non c'e' nulla da misurare: si usa la
+                # media corrente invece di riempire la finestra con un campione
+                # inventato (e di crashare se il down fosse fallito).
                 log.info("[dry-run] nessun campionamento post-stop")
+                new_avg = avg
             else:
                 time.sleep(30)
                 new_value = get_glances_metric(config)
