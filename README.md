@@ -24,7 +24,7 @@ docker logs -f emergency-stop
 **Nessun build locale**: l'immagine la builda GitHub Actions a ogni merge su `main`
 (workflow *Docker Build & Push*) e il compose fa solo **pull** da Docker Hub.
 
-## La cartella di deploy
+## La cartella deplo
 
 `/mnt/applicazioni/yml/docker/emergency-stop/`:
 
@@ -34,7 +34,7 @@ docker logs -f emergency-stop
 | `config.yaml` | soglie, Glances, Telegram |
 | `services/<nome>.yaml` | un file per servizio |
 
-## Il primo avvio è sicuro
+## Il primo avvio e' sicuro
 
 `docker-compose.yml` ha `DRY_RUN: "true"` **scritto letteralmente**: il container gira,
 legge la metrica, stampa cosa farebbe e **non spegne niente**.
@@ -47,7 +47,7 @@ docker compose up -d
 ```
 
 `config.yaml` e `services/` sono riletti a ogni giro (60s): modificarli **non**
-richiede restart. Solo `DRY_RUN` è una env var, quindi per cambiarlo serve
+richiede restart. Solo `DRY_RUN` e' una env var, quindi per cambiarlo serve
 `docker compose up -d`.
 
 ## Test singoli
@@ -167,7 +167,7 @@ altri servizi, va dichiarato come tale.
 
 ## Metriche Glances
 
-Da Glances 4.0 l'API è `/api/4/`: la vecchia `/api/3/` non esiste più
+Da Glances 4.0 l'API e' `/api/4/`: la vecchia `/api/3/` non esiste più
 (risponde `404 {"detail":"Not Found"}`) e il plugin `system` non espone
 più le metriche.
 
@@ -191,4 +191,13 @@ Per lavorare su un servizio: `docker compose stop emergency-stop`.
 ## Servizi mai fermati
 
 I servizi non in `services/` non vengono toccati.
-Attualmente esclusi: Nextcloud, Vikunja, Immich, Hermes, Glances, Uptime Kuma, ecc.
+
+Tutti i servizi del server hanno un YAML in `services/`: il gestore toglie
+quelli che non vuole gestire (es. `can_stop: false`).
+
+Attualmente esclusi:
+
+- **Vikunja** — sempre su per preferenza
+- **`arr`** — DB condiviso degli *arr, deve restare su
+- **`emergency-stop` e `hermes-agent`** — non si spengono da soli
+- **`docker`/`images`/`scripts`/`services.json`/`runtipi`/`sure`/`ytdl-sub`/`domain-watchdog`** — nessun container attivo o non servizi applicativi
