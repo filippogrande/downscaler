@@ -8,7 +8,7 @@ Type=oneshot
 # Verifica le dipendenze PRIMA di eseguire: senza questo, se requests/yaml
 # mancano ogni run fallisce con ModuleNotFoundError e il timer va in errore.
 ExecStartPre=/usr/bin/python3 -c "import requests, yaml"
-ExecStart=/usr/bin/python3 /opt/emergency-stop/emergency-stop.py
+ExecStart=/usr/bin/python3 /mnt/applicazioni/emergency-stop/emergency-stop.py
 User=root
 WorkingDirectory=/etc/emergency-stop
 
