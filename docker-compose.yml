@@ -1,0 +1,24 @@
+services:
+  emergency-stop:
+    build: .
+    image: filippogrande/downscaler:latest
+    container_name: emergency-stop
+    restart: "no"
+    # Ha bisogno del daemon Docker per spegnere/riaccendere gli altri servizi:
+    # e' un accesso root equivalente, voluto e documentato.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./services:/app/services:ro
+      - state:/app/state
+      - /var/log/emergency-stop.log:/app/emergency-stop.log
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  state:
