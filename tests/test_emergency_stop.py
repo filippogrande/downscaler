@@ -159,12 +159,14 @@ def test_i_file_di_esempio_sono_tutti_validi():
     """Controlla i file di servizio d'esempio.
 
     Non si fissa il conteggio: i servizi cambiano quando il server cambia.
-    Quello che non puo' cambiare e' che ogni file sia un servizio leggibile.
+    Quello che non puo' cambiare e' che la directory esista e che ogni
+    file sia un servizio leggibile.
     """
     directory = REPO / "examples" / "services"
     files = sorted(directory.glob("*.yaml"))
 
-    assert len(files) >= 15, f"troppi pochi file di servizio: {len(files)}"
+    assert directory.is_dir(), "manca examples/services/"
+    assert files, "nessun file di servizio d'esempio"
 
     for path in files:
         data = yaml.safe_load(path.read_text())
