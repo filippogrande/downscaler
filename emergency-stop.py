@@ -15,7 +15,9 @@ Config:
   /etc/emergency-stop/config.yaml        soglie, Glances, Telegram
   /etc/emergency-stop/services/<nome>.yaml  un file per servizio
 
-State: /var/lib/emergency-stop/state.json
+Codice: /mnt/applicazioni/emergency-stop/emergency-stop.py
+Stato:   /var/lib/emergency-stop/state.json
+Log:     /var/log/emergency-stop.log
 
 Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
 senza toccare Docker ne lo stato.
