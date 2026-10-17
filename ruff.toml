@@ -1,27 +1,35 @@
 # Ruff config per Emergency Stop
 #
-# EXE001 (shebang presente ma file non eseguibile) non si puo' risolvere
-# qui: i permessi del file non sono impostabili via GitHub MCP.
-#
-# 'ignore' da solo non basta: senza extend-select non si attivano le
-# regole extra. Con ALL si riattivano anche i preesistenti del repo
-# (DTZ, ANN, TRY, PTH, EM, G, S, BLE, TID, D, PLW, FBT, RUF, PERF),
-# che non fanno parte del lavoro di questa PR: restano spenti finche'
-# non si sistemano. Le regole che invece servono restano attive.
+# Regole attive per tutto il repo (extend-select + default di ruff).
+# Le eccezioni stanno in per-file-ignores, non in ignore globale:
+# un ignore globale per codice (DTZ, TRY, EM, D...) toglierebbe la
+# regola anche ai test, dove invece serve.
 extend-select = ["ALL"]
 
 ignore = [
-    # EXE001: shebang senza permesso di esecuzione (non impostabile via MCP)
-    "EXE001",
-    # Preesistenti, non introdotti qui: da sistemare a parte.
-    "DTZ", "ANN", "TRY", "PTH", "EM", "G", "S", "BLE", "TID", "D",
-    "PLW", "FBT", "RUF", "PERF", "SIM", "RET", "ARG", "PT", "UP",
-    "T20", "COM", "Q", "ICN", "N", "A", "C4", "I", "E501", "W", "E4",
-    "E7", "E9", "F", "PD", "NPY", "AIR", "DJ", "INT", "PGH", "PLC",
-    "PLE", "PLR", "PLW", "CPY", "DAR", "DOC", "ERA", "FA", "FIX", "FLY",
-    "FURB", "LOG", "PIE", "SLF", "SLOT", "TCH", "TD", "YTT", "ASYNC",
-    "B9", "B904", "B905", "C90", "T10", "INP", "ISC", "TC", "RSE",
-    "TH", "FBT", "PYI", "DTZ", "BLE", "DJ",
+    # E501: righe lunghe (il codice ha testi e messaggi lunghi, non blocca)
+    "E501",
+    # I: import non ordinati (non blocca la review)
+    "I",
+    # PLW: warning di design (es. PLW0603 global statement) — non blocca
+    "PLW",
+    # UP: suggerimenti di modernizzazione (typing moderno, ecc.)
+    "UP",
 ]
 
 target-version = "py312"
+
+[per-file-ignores]
+# emergency-stop.py: codice preesistente, non sistemato da questa PR.
+# EXE001 non e' risolvibile: i permessi del file non sono impostabili
+# via GitHub MCP.
+"emergency-stop.py" = [
+    "EXE001", "DTZ", "ANN", "TRY", "PTH", "EM", "G", "S", "BLE", "TID",
+    "D", "FBT", "RUF", "PERF", "SIM", "RET", "ARG", "PT", "T20", "COM",
+    "Q", "ICN", "N", "A", "C4", "PD", "NPY", "AIR", "DJ", "INT", "PGH",
+    "PLC", "PLE", "PLR", "CPY", "DAR", "DOC", "ERA", "FA", "FIX", "FLY",
+    "FURB", "LOG", "PIE", "SLF", "SLOT", "TCH", "TD", "YTT", "ASYNC",
+    "B9", "C90", "T10", "INP", "ISC", "TC", "RSE", "TH", "PYI",
+]
+# tests/: i test usano fixture di pytest e nomi volutamente semplici.
+"tests/*" = ["ANN", "ARG", "D", "PT", "PLC", "PLR", "PTH", "SLF", "INP"]
