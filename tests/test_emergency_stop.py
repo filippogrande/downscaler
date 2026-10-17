@@ -3,9 +3,8 @@
 Coprono la logica pura (media mobile, selezione del candidato) e la
 costruzione della config dei servizi, senza Docker ne file di stato reali.
 
-Il path del log va impostato PRIMA dell'import: emergency-stop.py chiama
-_setup_logging() al caricamento del modulo, quindi _setup_logging() e' ora
-resiliente (vedi il guard nella stessa funzione).
+I path (log/stato/config/servizi) sono in /tmp via conftest.py, impostati
+PRIMA dell'import: emergency-stop.py chiama _setup_logging() al caricamento.
 """
 
 import importlib.util
