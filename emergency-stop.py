@@ -546,6 +546,17 @@ def update_window(window: deque, value: float, window_sec: int, sample_interval:
         window.popleft()
     return sum(window) / len(window) if window else 0.0
 
+# ─── Formattazione log ─────────────────────────────────────────────────────
+
+def fmt_metric(value: float | None) -> str:
+    """Formatta una metrica per i log: 'N/A' se mancante.
+
+    Non si puo' mettere la condizione dentro il format specifier di una
+    f-string (`{v:.1f if v else 'N/A'}` solleva ValueError), e `if v` avrebbe
+    trattato 0.0 come valore mancante.
+    """
+    return f"{value:.1f}" if value is not None else "N/A"
+
 # ─── Main loop ─────────────────────────────────────────────────────────────
 
 def main():
@@ -638,7 +649,7 @@ def main():
             iowait_ok = (avg_iowait is None or avg_iowait < restart_threshold)
             load_ok = (avg_load is None or avg_load < load_restart_threshold)
             if not (iowait_ok and load_ok):
-                log.info(f"Recovery: ancora sopra soglia (iowait_media={avg_iowait:.1f if avg_iowait else 'N/A'}, load_media={avg_load:.1f if avg_load else 'N/A'}), attendo")
+                log.info(f"Recovery: ancora sopra soglia (iowait_media={fmt_metric(avg_iowait)}, load_media={fmt_metric(avg_load)}), attendo")
                 return
             if state["stopped_services"]:
                 service_name = state["stopped_services"][-1]
@@ -686,7 +697,7 @@ def main():
     load_alarm = avg_load is not None and avg_load >= load_stop_threshold
 
     if iowait_alarm or load_alarm:
-        log.warning(f"ALLARME: iowait_media={avg_iowait:.1f if avg_iowait else 'N/A'} (soglia {stop_threshold}), load_media={avg_load:.1f if avg_load else 'N/A'} (soglia {load_stop_threshold})")
+        log.warning(f"ALLARME: iowait_media={fmt_metric(avg_iowait)} (soglia {stop_threshold}), load_media={fmt_metric(avg_load)} (soglia {load_stop_threshold})")
 
         stopped = set(state.get("stopped_services", []))
         failed = set(state.get("failed_stops", []))
@@ -737,7 +748,7 @@ def main():
                 state["metric_window"] = list(window_iowait)
                 state["metric_window_load"] = list(window_load)
                 save_state(state)
-                log.info(f"Post-stop {service['name']}: iowait_media={new_avg_iowait:.1f if new_avg_iowait else 'N/A'}, load_media={new_avg_load:.1f if new_avg_load else 'N/A'}")
+                log.info(f"Post-stop {service['name']}: iowait_media={fmt_metric(new_avg_iowait)}, load_media={fmt_metric(new_avg_load)}")
 
             # Recovery se ENTRAMBE sotto soglia
             iowait_ok = (new_avg_iowait is None or new_avg_iowait < stop_threshold)
