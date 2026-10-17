@@ -11,13 +11,17 @@ Logica:
 5. Recovery graduale: un servizio ogni restart_delay, solo a metrica calata
 6. Notifiche Telegram: inizio downscale, inizio recovery, fine incidente
 
-Config:
-  /etc/emergency-stop/config.yaml        soglie, Glances, Telegram
-  /etc/emergency-stop/services/<nome>.yaml  un file per servizio
+Dentro il container (mount dal compose):
+  config:   /app/config.yaml
+  servizi:  /app/services/<nome>.yaml
+  stato:    /app/state/state.json
+  log:      /app/emergency-stop.log
 
-Codice: /mnt/applicazioni/emergency-stop/emergency-stop.py
-Stato:   /var/lib/emergency-stop/state.json
-Log:     /var/log/emergency-stop.log
+Sulla macchina host:
+  compose:  /mnt/applicazioni/yml/docker/emergency-stop/docker-compose.yml
+  .env:     /mnt/applicazioni/yml/docker/emergency-stop/.env
+  servizi:  /mnt/applicazioni/yml/docker/emergency-stop/services/*.yaml
+  log:      /var/log/emergency-stop.log
 
 Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
 senza toccare Docker ne lo stato, --selftest prova i file di servizio
@@ -27,6 +31,7 @@ senza Docker.
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -39,10 +44,10 @@ import yaml
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-CONFIG_PATH = Path("/etc/emergency-stop/config.yaml")
-SERVICES_DIR = Path("/etc/emergency-stop/services")
-STATE_PATH = Path("/var/lib/emergency-stop/state.json")
-LOG_PATH = Path("/var/log/emergency-stop.log")
+CONFIG_PATH = Path("/app/config.yaml")
+SERVICES_DIR = Path("/app/services")
+STATE_PATH = Path("/app/state/state.json")
+LOG_PATH = Path("/app/emergency-stop.log")
 
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
@@ -59,8 +64,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("emergency-stop")
 
-# Vero per l'intera durata del processo: in --dry-run non scriviamo stato
-DRY_RUN = False
+# --dry-run si puo' anche attivare da env (DRY_RUN=true nel .env): comodo per
+# provare il container senza ricostruirlo.
+DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes", "on")
 
 # ─── Config servizi ──────────────────────────────────────────────────────────
 
@@ -122,8 +128,8 @@ def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
 def check_service_files(services: list[dict], config: dict) -> bool:
     """Controlla i file di servizio. Ritorna True se tutto ok.
 
-    Modalita' --selftest: solo file e nomi, niente Docker (il container non
-    ha il socket Docker, quindi non puo' elencare i container).
+    Modalita' --selftest: solo file e nomi, niente Docker (utile dove non
+    c'e' il socket Docker, o per controllare la config senza permessi).
     """
     ok = True
     selftest = getattr(check_service_files, "selftest", False)
@@ -378,16 +384,22 @@ def main():
     parser = argparse.ArgumentParser(description="Emergency Stop")
     parser.add_argument("--validate", action="store_true", help="valida la configurazione e esci")
     parser.add_argument("--selftest", action="store_true",
-                        help="valida i file di servizio senza Docker (utile nel container)")
+                        help="valida i file di servizio senza Docker (utile dove manca il socket)")
     parser.add_argument("--dry-run", action="store_true",
                         help="mostra cosa farebbe, senza toccare Docker ne lo stato")
+    parser.add_argument("--no-dry-run", action="store_true",
+                        help="esegue davvero (annulla DRY_RUN=true del .env)")
     args = parser.parse_args()
 
     if not CONFIG_PATH.exists():
         log.error(f"Config non trovato: {CONFIG_PATH}")
         sys.exit(1)
 
-    DRY_RUN = args.dry_run
+    if args.dry_run:
+        DRY_RUN = True
+    if args.no_dry_run:
+        DRY_RUN = False
+
     config = yaml.safe_load(CONFIG_PATH.read_text())
     services = load_services(SERVICES_DIR)
 
