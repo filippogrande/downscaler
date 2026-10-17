@@ -55,9 +55,13 @@ ignore = [
     "F541",
 ]
 
-# tests/: i test usano fixture di pytest e nomi volutamente semplici.
+# tests/: i test usano fixture di pytest, nomi volutamente semplici e
+# funzioni senza return type (pytest li gestisce).
 "tests/*" = [
     "ANN",
+    "ANN201",
+    "ANN202",
+    "ANN204",
     "ARG",
     "D",
     "PT",
