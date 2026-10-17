@@ -380,6 +380,19 @@ def test_fmt_metric_formatta_e_gestisce_il_mancante():
     assert MODULE.fmt_metric(None) == "N/A"
 
 
+def _avvia_main(monkeypatch, argv, state_path):
+    """Prepara il giro di main() senza Docker: niente container, niente rete.
+
+    Glances e' sostituito dai valori simulati degli argv, i container sono
+    sempre assenti e i file di servizio sono forniti dal chiamante: cosi' i
+    test non dipendono da examples/ ne dal socket Docker.
+    """
+    monkeypatch.setattr(MODULE, "CONFIG_PATH", REPO / "config.yaml")
+    monkeypatch.setattr(MODULE, "STATE_PATH", state_path)
+    monkeypatch.setattr(MODULE, "running_containers", lambda names: [])
+    monkeypatch.setattr(sys, "argv", argv)
+
+
 def test_allarme_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
     """Il ramo di allarme deve scrivere il log, non sollevare ValueError.
 
@@ -399,15 +412,11 @@ def test_allarme_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
         "priority": 60,
         "note": "",
     }
-
-    monkeypatch.setattr(MODULE, "CONFIG_PATH", REPO / "config.yaml")
-    monkeypatch.setattr(MODULE, "STATE_PATH", tmp_path / "state.json")
-    monkeypatch.setattr(MODULE, "running_containers", lambda names: [])
     monkeypatch.setattr(MODULE, "load_services", lambda directory: [servizio])
-    monkeypatch.setattr(
-        sys,
-        "argv",
+    _avvia_main(
+        monkeypatch,
         ["emergency-stop", "--dry-run", "--simulate-iowait", "5", "--simulate-load", "430"],
+        tmp_path / "state.json",
     )
 
     with caplog.at_level(logging.INFO, logger="emergency-stop"):
@@ -416,15 +425,42 @@ def test_allarme_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
     testo = caplog.text
     assert "ALLARME: iowait_media=5.0" in testo
     assert "load_media=430.0" in testo
-    # anche il log post-stop passa da fmt_metric: non deve esplodere
-    assert "Post-stop radarr: iowait_media=5.0, load_media=430.0" in testo
+
+
+def test_recovery_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
+    """Anche il ramo di recovery deve loggare, non sollevare ValueError.
+
+    Stesso difetto del ramo di allarme. Qui lo stato e' gia' in modalita'
+    recovery con le metriche ancora sopra soglia: e' il caso in cui quel
+    log viene emesso. Il ramo post-stop invece e' nel cammino NON dry-run
+    (c'e' il campionamento reale dopo il down) e non si puo' eseguire qui.
+    """
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({
+        "mode": "recovery",
+        "recovery_started_at": "2020-01-01T00:00:00",
+    }))
+    monkeypatch.setattr(MODULE, "load_services", lambda directory: [])
+    _avvia_main(
+        monkeypatch,
+        ["emergency-stop", "--dry-run", "--simulate-iowait", "430", "--simulate-load", "5"],
+        state_path,
+    )
+
+    with caplog.at_level(logging.INFO, logger="emergency-stop"):
+        MODULE.main()  # non deve sollevare
+
+    testo = caplog.text
+    assert "Recovery: ancora sopra soglia (iowait_media=430.0" in testo
+    assert "load_media=5.0" in testo
 
 
 def test_nessun_format_specifier_con_condizione():
     """Un selettore di formato non puo' contenere una condizione.
 
-    Rete di sicurezza: il fix e' in fmt_metric(), ma se un log futuro
-    reintroduce `{v:.1f if ...}` il container torna al restart loop.
+    Rete di sicurezza per il ramo post-stop, l'unico dei tre log che i test
+    funzionali non eseguono: se quel pattern torna, il container riparte in
+    restart loop.
     """
     sorgente = (REPO / "emergency-stop.py").read_text()
 
