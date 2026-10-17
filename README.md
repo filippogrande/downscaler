@@ -21,14 +21,41 @@ sudo cp /opt/emergency-stop/examples/services/*.yaml /etc/emergency-stop/service
 # 4. Valida la configurazione (dir, compose, nomi container, Glances)
 python3 /opt/emergency-stop/emergency-stop.py --validate
 
-# 5. Copia i file systemd e avvia
+# 5. Prova senza fare nulla: mostra cosa farebbe
+python3 /opt/emergency-stop/emergency-stop.py --dry-run
+
+# 6. Copia i file systemd e avvia
 sudo cp /opt/emergency-stop/emergency-stop.service /etc/systemd/system/
 sudo cp /opt/emergency-stop/emergency-stop.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now emergency-stop.timer
 ```
 
-**Sempre `--validate` dopo aver modificato un file di servizio**, prima di riavviare il timer.
+**Ordine obbligato: `--validate`, poi `--dry-run`, poi il timer.**
+Mai abilitare il timer prima di aver visto un `--dry-run` pulito.
+
+## Le due modalita' di verifica
+
+```bash
+# Controlla config, compose, nomi container, Glances. Non tocca nulla.
+python3 /opt/emergency-stop/emergency-stop.py --validate
+
+# Esegue la logica completa MA senza toccare Docker ne lo stato:
+# stampa '[dry-run] STOP: <servizio>' invece di fermarlo.
+python3 /opt/emergency-stop/emergency-stop.py --dry-run
+```
+
+`--dry-run` legge lo stato esistente (quindi vede i servizi gia' fermi) ma **non lo
+riscrive**: il file di stato resta pulito e il timer puo' essere abilitato dopo.
+
+Esempio di output:
+
+```
+=== DRY-RUN: nessuna azione reale verra' eseguita ===
+Check: iowait=2.1 media=1.8 (stop>80.0, restart<60.0)
+Health check: radarr è down, lo riavvio
+[dry-run] START: radarr → docker compose -f /mnt/applicazioni/yml/docker/radarr/docker-compose.yml up -d
+```
 
 ## Configurazione
 
@@ -100,18 +127,29 @@ lo stesso compose e vanno giù insieme.
 # Valida config, compose e nomi container
 python3 /opt/emergency-stop/emergency-stop.py --validate
 
+# Mostra cosa farebbe, senza eseguire nulla
+python3 /opt/emergency-stop/emergency-stop.py --dry-run
+
 # Vedi i log
 journalctl -u emergency-stop.service -f
 
 # Vedi lo stato
-cat /tmp/emergency-stop-state.json
+cat /var/lib/emergency-stop/state.json
 
 # Riavvia il timer
 sudo systemctl restart emergency-stop.timer
 
-# Prova manualmente
+# Prova manualmente (esegue davvero)
 python3 /opt/emergency-stop/emergency-stop.py
 ```
+
+## Stato
+
+`/var/lib/emergency-stop/state.json` — **non** in `/tmp`, che si svuota al reboot.
+Se lo stato sparisce si perdono `recovery_started_at` e `incident_start`, quindi
+la durata dell'incidente e il primo riavvio dopo un riavvio del server.
+
+In `--dry-run` lo stato **non viene scritto**.
 
 ## Metriche Glances
 
@@ -133,6 +171,9 @@ non viene più usato `0.0` (= tutto ok).
 3. **Isteresi**: stop se media > 80%.
 4. **Stop graduale**: ferma un servizio alla volta; se il down fallisce, il giro dopo prova il successivo.
 5. **Recovery**: 5 min di calma **con media < restart_threshold** → riavvia un servizio → altri 5 min → il successivo.
+
+**Avviso**: chi spegne un servizio a mano lo vede riacceso dal health-check entro 60s.
+Prima di lavorare su un servizio: `systemctl stop emergency-stop.timer`.
 
 ## Servizi mai fermati
 
