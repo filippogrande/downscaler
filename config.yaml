@@ -8,18 +8,20 @@ glances:
   url: "http://10.0.0.5:61208"
 
 monitor:
-  metric: "iowait"              # "iowait" o "load"
-  sample_interval_sec: 30       # campiona ogni 30s
-  window_sec: 120               # finestra media mobile: 2 min
-  stop_threshold: 80.0          # media > 80% → ferma un servizio
-  restart_threshold: 60.0       # media < 60% → puo' riavviare
-  check_interval_sec: 60        # loop ogni 60s (letto da entrypoint.sh)
+  metric: "iowait"               # "iowait" o "load" (compatibilita', log)
+  sample_interval_sec: 30        # campiona ogni 30s
+  window_sec: 120                # finestra media mobile: 2 min
+  stop_threshold: 80.0           # iowait > 80% -> ferma un servizio
+  restart_threshold: 60.0        # iowait < 60% -> puo' riavviare
+  load_stop_threshold: 6.0       # load > 6 (su 6 core) -> ferma un servizio
+  load_restart_threshold: 4.0    # load < 4 -> puo' riavviare
+  check_interval_sec: 60         # loop ogni 60s (letto da entrypoint.sh)
 
 recovery:
-  calm_duration_sec: 300        # 5 min di calma prima del primo riavvio
-  restart_delay_sec: 300        # 5 min tra un riavvio e l'altro
+  calm_duration_sec: 300         # 5 min di calma prima del primo riavvio
+  restart_delay_sec: 300         # 5 min tra un riavvio e l'altro
 
 telegram:
-  enabled: false                # true = notifiche attive
+  enabled: false                 # true = notifiche attive
   bot_token: "INSERISCI_BOT_TOKEN"
   chat_id: "INSERISCI_CHAT_ID"
