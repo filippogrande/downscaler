@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pytest bandit
+
+      # Diagnostica: elenca i prefissi di regola ruff disponibili. Se un
+      # ruff.toml ha un selettore inesistente, la CI fallisce con un errore
+      # criptico (exit 2) e non si capisce quale codice e' sbagliato.
+      - name: ruff rule prefixes
+        run: ruff rule --all | grep -oE '^[A-Z]+[0-9]+' | sed 's/[0-9]*$//' | sort -u
+
+      - name: Lint
+        run: ruff check emergency-stop.py tests/
+
+      - name: Security scan
+        # bandit segnala warning su subprocess/requests: li accettiamo,
+        # ma un finding medio+ blocca. -ll = solo medium e high.
+        run: bandit -r emergency-stop.py -ll
+
+      - name: Test
+        run: pytest --tb=short -q
+
+      - name: Docker build
+        run: docker build -t downscaler .
