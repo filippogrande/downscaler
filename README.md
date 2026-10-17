@@ -37,6 +37,25 @@ Modifica `/opt/emergency-stop/config.yaml`:
 - `recovery.restart_delay_sec`: 5 min tra un riavvio e l'altro
 - `telegram`: bot_token e chat_id per notifiche
 
+### Metriche Glances
+
+Da Glances 4.0 l'API è `/api/4/`: la vecchia `/api/3/` non esiste più
+(risponde `404 {"detail":"Not Found"}`) e il plugin `system` non espone
+più le metriche.
+
+- `iowait` → `GET /api/4/cpu`, campo `iowait`
+- `load` → `GET /api/4/load`, campo `min1`
+
+Il programma prova prima `/api/4/` e poi `/api/3/` (per Glances più vecchi).
+Se la metrica non è leggibile l'errore viene scritto nel log invece di
+passare in silenzio il valore `0.0`.
+
+Verifica l'endpoint prima di installare il servizio:
+
+```bash
+curl -s http://10.0.0.5:61208/api/4/cpu | head -c 200
+```
+
 ## Notifiche Telegram
 
 Il sistema invia notifiche precise:
