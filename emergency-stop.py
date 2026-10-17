@@ -15,11 +15,10 @@ Dentro il container (mount dal compose):
   config:   /app/config.yaml
   servizi:  /app/services/<nome>.yaml
   stato:    /app/state/state.json
-  log:      /app/emergency-stop.log
+  log:      /app/logs/emergency-stop.log
 
 Sulla macchina host:
   compose:  /mnt/applicazioni/yml/docker/emergency-stop/docker-compose.yml
-  .env:     /mnt/applicazioni/yml/docker/emergency-stop/.env
   servizi:  /mnt/applicazioni/yml/docker/emergency-stop/services/*.yaml
   log:      /var/log/emergency-stop.log
 
@@ -47,25 +46,40 @@ import yaml
 CONFIG_PATH = Path("/app/config.yaml")
 SERVICES_DIR = Path("/app/services")
 STATE_PATH = Path("/app/state/state.json")
-LOG_PATH = Path("/app/emergency-stop.log")
+LOG_PATH = Path("/app/logs/emergency-stop.log")
 
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_PATH),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+def _setup_logging():
+    """Configura il logging su file e stdout.
+
+    Se il file di log non esiste lo crea: con un bind-mount su un file inesistente
+    Docker crea una DIRECTORY, e FileHandler fallirebbe con IsADirectoryError.
+    """
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not LOG_PATH.exists():
+        LOG_PATH.touch()
+    handlers = [logging.StreamHandler(sys.stdout)]
+    try:
+        handlers.append(logging.FileHandler(LOG_PATH))
+    except OSError as e:
+        # Meglio loggare su stdout che non partire affatto: il container
+        # ripartirebbe in loop con un traceback, come e' successo.
+        print(f"ATTENZIONE: impossibile scrivere il log su {LOG_PATH}: {e}", file=sys.stderr)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=handlers,
+    )
+
+
+_setup_logging()
 log = logging.getLogger("emergency-stop")
 
-# --dry-run si puo' anche attivare da env (DRY_RUN=true nel .env): comodo per
-# provare il container senza ricostruirlo.
+# --dry-run si puo' attivare da env (DRY_RUN=true nel compose).
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes", "on")
 
 # ─── Config servizi ──────────────────────────────────────────────────────────
@@ -388,7 +402,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="mostra cosa farebbe, senza toccare Docker ne lo stato")
     parser.add_argument("--no-dry-run", action="store_true",
-                        help="esegue davvero (annulla DRY_RUN=true del .env)")
+                        help="esegue davvero (annulla DRY_RUN=true del compose)")
     args = parser.parse_args()
 
     if not CONFIG_PATH.exists():
