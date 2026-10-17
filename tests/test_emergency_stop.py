@@ -2,10 +2,16 @@
 
 Coprono la logica pura (media mobile, selezione del candidato) e la
 costruzione della config dei servizi, senza Docker ne file di stato reali.
+
+Il path del log va impostato PRIMA dell'import: emergency-stop.py chiama
+_setup_logging() al caricamento del modulo, quindi puntarlo su /tmp via
+conftest.py (vedi sotto).
 """
 
 import importlib.util
+import os
 import sys
+import tempfile
 from collections import deque
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,16 +19,19 @@ from types import SimpleNamespace
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
+
+# /app non esiste in CI: l'argomento di _setup_logging() lo trova non
+# scrivibile, e il modulo logga su stdout senza fallire.
+os.environ.setdefault("EMERGENCY_STOP_LOG_PATH", "/tmp/emergency-stop-test.log")
+
 SPEC = importlib.util.spec_from_file_location("emergency_stop", REPO / "emergency-stop.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 
-# emergency-stop.py apre un FileHandler al primo import: senza questo, l'import
-# fallirebbe nel container di CI (dove /app non esiste).
-MODULE.LOG_PATH = Path("/tmp/emergency-stop-test.log")
-MODULE.LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-
 sys.modules["emergency_stop"] = MODULE
 SPEC.loader.exec_module(MODULE)
+
+# Il modulo importato prima del setdefault sopra: se serve, lo puntiamo qui.
+MODULE.LOG_PATH = Path(tempfile.gettempdir()) / "emergency-stop-test.log"
 
 
 # ─── Media mobile ────────────────────────────────────────────────────────────
