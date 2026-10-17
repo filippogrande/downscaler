@@ -18,6 +18,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - ./config.yaml:/app/config.yaml:ro
       - ./services:/app/services:ro
+      # I compose_dir nei file servizio sono path assoluti dell'HOST
+      # (/mnt/applicazioni/yml/docker/...): senza questo mount il container
+      # non li vede e TUTTI i servizi risultano inesistenti.
+      - /mnt/applicazioni:/mnt/applicazioni:ro
       - state:/app/state
       # Nomi host e container DIVERSI: un bind di un file che non esiste sull'host
       # crea una DIRECTORY dentro il container, e il log handler non la apre.

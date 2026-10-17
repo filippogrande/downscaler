@@ -1,12 +1,16 @@
 FROM python:3.14-alpine
 
 # ── Dipendenze di sistema ───────────────────────────────────────────────
-# Il downscaler chiama il CLI docker (`docker ps`, `docker compose down/up`).
-# Senza il binario nel PATH ogni chiamata muore con
-# FileNotFoundError: [Errno 2] No such file or directory: 'docker'
-# e il container parte in restart loop (verificato 17/10/26).
+# Il downscaler chiama il CLI docker (`docker ps`) E `docker compose down/up`.
+#
+# Trappola 1: senza docker-cli le chiamate muoiono con FileNotFoundError
+#          'docker' e il container parte in restart loop (17/10/26).
+# Trappola 2: `docker-cli` da solo NON include il plugin Compose: `docker compose`
+#          fallisce con "unknown shorthand flag: 'f' in -f" perche' docker
+#          interpreta `compose` come un comando suo (17/10/26).
+#          Serve anche `docker-cli-compose`.
 # bash: comodo per i test manuali (`docker compose run --rm ... sh`).
-RUN apk add --no-cache docker-cli bash
+RUN apk add --no-cache docker-cli docker-cli-compose bash
 
 # Il downscaler deve poter scrivere il log nella directory bind-mountata
 # dal compose (/var/log/emergency-stop.log sull'host): gira come root.

@@ -265,6 +265,20 @@ def test_il_dockerfile_installa_il_cli_docker():
     assert "docker-cli" in dockerfile, "il Dockerfile deve installare docker-cli"
 
 
+def test_il_dockerfile_installa_il_plugin_compose():
+    """`docker compose` e' un PLUGIN: serve docker-cli-compose, non solo docker-cli.
+
+    Regressione verificata 17/10/26: con solo docker-cli, `docker compose -f ...`
+    fallisce con "unknown shorthand flag: 'f' in -f" perche' docker interpreta
+    `compose` come un comando proprio.
+    """
+    dockerfile = (REPO / "Dockerfile").read_text()
+
+    assert "docker-cli-compose" in dockerfile, (
+        "il Dockerfile deve installare docker-cli-compose (plugin Compose)"
+    )
+
+
 def test_il_compose_monta_il_socket_docker():
     """Il CLI docker parla col daemon attraverso il socket montato dal compose."""
     compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
@@ -276,6 +290,24 @@ def test_il_compose_monta_il_socket_docker():
         assert any("docker.sock" in str(m) for m in mounts), (
             f"{name}: manca il mount del socket docker"
         )
+
+
+def test_il_compose_monta_le_directory_dei_servizi():
+    """I compose_dir dei file servizio sono path assoluti dell'HOST.
+
+    Senza questo mount il container non vede /mnt/applicazioni e TUTTI i
+    servizi risultano con compose_dir inesistente (verificato 17/10/26).
+    """
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
+    services = compose.get("services", {})
+
+    mounts = []
+    for service in services.values():
+        mounts.extend(service.get("volumes", []) or [])
+
+    assert any("/mnt/applicazioni" in str(m) for m in mounts), (
+        "il compose deve montare /mnt/applicazioni: i compose_dir sono path dell'host"
+    )
 
 
 # ─── Config d'esempio del repo ───────────────────────────────────────────────
@@ -300,6 +332,11 @@ def test_i_file_di_esempio_sono_tutti_validi():
         assert data.get("name"), f"{path.name}: manca 'name'"
         assert data.get("compose_dir"), f"{path.name}: manca 'compose_dir'"
         assert isinstance(data.get("priority"), int), f"{path.name}: priority non e' un intero"
+        # i compose_dir devono essere path assoluti: sono letti dall'host,
+        # non dal container
+        assert str(data.get("compose_dir", "")).startswith("/"), (
+            f"{path.name}: compose_dir deve essere un path assoluto"
+        )
 
 
 def test_config_yaml_del_repo_e_valido():
