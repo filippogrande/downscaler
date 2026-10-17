@@ -3,12 +3,14 @@ services:
     build: .
     image: filippogrande/downscaler:latest
     container_name: emergency-stop
-    # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh):
-    # attenzione: DRY_RUN=true (default) non ferma/spegne NIENTE.
+    # Gira ininterrotto (loop ogni 60s dentro entrypoint.sh).
+    # DRY_RUN=true di default: non spegne/riaccende NIENTE, stampa solo cosa farebbe.
     restart: unless-stopped
+    # Valori letterali, niente interpolazione ${...}.
+    # Per spegnerlo davvero: DRY_RUN: "false" qui, poi docker compose up -d.
     environment:
-      DRY_RUN: "${DRY_RUN:-true}"
-      CHECK_INTERVAL: "${CHECK_INTERVAL:-60}"
+      DRY_RUN: "true"
+      CHECK_INTERVAL: "60"
     volumes:
       # rw (non ro): 'docker compose down' scrive sul socket, ro non basta.
       # E' un accesso equivalente a root al daemon: voluto e documentato.
