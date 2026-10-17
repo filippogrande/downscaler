@@ -1,8 +1,8 @@
 # Emergency Stop
 
 Sistema di salvataggio/paracadute per il home-lab: quando il server soffre
-(iowait troppo alto), spegne automaticamente servizi non critici in ordine di priorità,
-poi li riaccende gradualmente dopo 5 min di calma.
+(iowait o load troppo alti), spegne automaticamente servizi non critici in ordine
+di priorità, poi li riaccende gradualmente dopo 5 min di calma.
 
 ## Installazione
 
@@ -98,11 +98,18 @@ docker compose pull && docker compose up -d
 - `monitor.metric`: `iowait` o `load`
 - `monitor.sample_interval_sec`: ogni quanto campionare (30s)
 - `monitor.window_sec`: finestra media mobile (120s = 2 min)
-- `monitor.stop_threshold`: media > 80% → ferma un servizio
-- `monitor.restart_threshold`: media < 60% → può riavviare
+- `monitor.stop_threshold`: media iowait > 80% → ferma un servizio
+- `monitor.restart_threshold`: media iowait < 60% → può riavviare
+- `monitor.load_stop_threshold`: media load > 6 → ferma un servizio
+- `monitor.load_restart_threshold`: media load < 4 → può riavviare
 - `recovery.calm_duration_sec`: 5 min di calma prima del primo riavvio
 - `recovery.restart_delay_sec`: 5 min tra un riavvio e l'altro
 - `telegram`: bot_token e chat_id per notifiche
+
+L'allarme scatta se **una** delle due metriche supera la sua soglia; il riavvio
+richiede che **entrambe** siano sotto soglia. Con le soglie di default, un load
+sostenuto (backup, transcode, `docker system prune`) ferma i servizi non critici
+anche se la CPU è ferma: è il caso d'uso del load.
 
 ### File di servizio
 
@@ -173,10 +180,10 @@ non viene più usato `0.0` (= tutto ok).
 ## Come funziona
 
 1. **Health check**: ogni 60s verifica i servizi residenti non spenti dal sistema e li riavvia (salta one-shot e `can_restart: false`).
-2. **Media mobile**: campiona iowait ogni 30s, media su finestra di 2 min.
-3. **Isteresi**: stop se media > 80%.
+2. **Media mobile**: campiona iowait e load ogni 30s, media su finestra di 2 min.
+3. **Isteresi**: stop se la media di iowait **o** di load supera la soglia; il riavvio richiede entrambe sotto soglia.
 4. **Stop graduale**: ferma un servizio alla volta; se il down fallisce, il giro dopo prova il successivo.
-5. **Recovery**: 5 min di calma **con media < restart_threshold** → riavvia un servizio → altri 5 min → il successivo.
+5. **Recovery**: 5 min di calma **con entrambe le medie sotto soglia** → riavvia un servizio → altri 5 min → il successivo.
 
 **Avviso**: chi spegne un servizio a mano lo vede riacceso dal health-check entro 60s.
 Per lavorare su un servizio: `docker compose stop emergency-stop`.
