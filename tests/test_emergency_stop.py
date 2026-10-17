@@ -148,8 +148,10 @@ def test_running_containers_non_crasha_senza_cli_docker(monkeypatch):
     `docker ps` sollevava FileNotFoundError e il container ripartiva in loop.
     Il health check deve saltare il servizio, non portare giu' tutto.
     """
+    err_msg = "[Errno 2] No such file or directory: 'docker'"
+
     def fake_run(*args, **kwargs):
-        raise FileNotFoundError("[Errno 2] No such file or directory: 'docker'")
+        raise FileNotFoundError(err_msg)
 
     monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
 
@@ -158,8 +160,10 @@ def test_running_containers_non_crasha_senza_cli_docker(monkeypatch):
 
 def test_is_service_running_false_senza_cli_docker(monkeypatch):
     """Senza CLI docker il servizio non e' 'in esecuzione': meglio non riavviarlo."""
+    err_msg = "[Errno 2] No such file or directory: 'docker'"
+
     def fake_run(*args, **kwargs):
-        raise FileNotFoundError("[Errno 2] No such file or directory: 'docker'")
+        raise FileNotFoundError(err_msg)
 
     monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
 
