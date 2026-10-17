@@ -7,24 +7,24 @@ poi li riaccende gradualmente dopo 5 min di calma.
 ## Installazione
 
 ```bash
-# 1. Clona il repo (solo il codice)
+# 0. Clona il repo (SOLO se non esiste gia': /opt/emergency-stop)
 git clone https://github.com/filippogrande/downscaler.git /opt/emergency-stop
 
-# 2. Installa dipendenze
+# 1. Dipendenze
 pip3 install pyyaml requests
 
-# 3. Configura (FUORI dal repo: un git pull non le sovrascrive)
+# 2. Configura (FUORI dal repo: un git pull non la sovrascrive)
 sudo mkdir -p /etc/emergency-stop/services
-sudo cp /opt/emergency-stop/config.yaml /etc/emergency-stop/config.yaml
+sudo cp /opt/emergency-stop/config.yaml /etc/emergency-stop/
 sudo cp /opt/emergency-stop/examples/services/*.yaml /etc/emergency-stop/services/
 
-# 4. Valida la configurazione (dir, compose, nomi container, Glances)
+# 3. Valida la configurazione (dir, compose, nomi container, Glances)
 python3 /opt/emergency-stop/emergency-stop.py --validate
 
-# 5. Prova senza fare nulla: mostra cosa farebbe
+# 4. Prova senza fare nulla: mostra cosa farebbe
 python3 /opt/emergency-stop/emergency-stop.py --dry-run
 
-# 6. Copia i file systemd e avvia
+# 5. Copia i file systemd e avvia
 sudo cp /opt/emergency-stop/emergency-stop.service /etc/systemd/system/
 sudo cp /opt/emergency-stop/emergency-stop.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -45,7 +45,7 @@ python3 /opt/emergency-stop/emergency-stop.py --validate
 python3 /opt/emergency-stop/emergency-stop.py --dry-run
 ```
 
-`--dry-run` legge lo stato esistente (quindi vede i servizi gia' fermi) ma **non lo
+`--dry-run` legge lo stato esistente (quindi vede i servizi gia' fermati) ma **non lo
 riscrive**: il file di stato resta pulito e il timer puo' essere abilitato dopo.
 
 Esempio di output:
