@@ -1,0 +1,13 @@
+name: interesting-items
+compose_dir: /mnt/applicazioni/yml/docker/interesting-items
+compose_file: docker-compose.yml
+service_name:
+  - interesting-items-app-1
+  - interesting-items-bot-1
+  - interesting-items-frontend-1
+  - interesting-items-db-1
+  - interesting-items-redis-1
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 160
