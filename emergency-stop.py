@@ -6,9 +6,10 @@ Logica:
 1. Health check: riavvia servizi down che non sono stati spenti dal sistema
    (salta gli one-shot e quelli con can_restart: false)
 2. Media mobile: campiona ogni 30s, media su finestra 2 min
-3. Isteresi: stop se media > soglia, recovery solo se media < soglia
+3. Isteresi: stop se iowait > soglia_iowait OPPURE load > soglia_load,
+   recovery solo se ENTRAMBE < soglie
 4. Stop graduale: un servizio alla volta, poi passa al successivo
-5. Recovery graduale: un servizio ogni restart_delay, solo a metrica calata
+5. Recovery graduale: un servizio ogni restart_delay, solo a metriche calate
 6. Notifiche Telegram: inizio downscale, inizio recovery, fine incidente
 
 Dentro il container (mount dal compose):
@@ -25,6 +26,9 @@ Sulla macchina host:
 Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
 senza toccare Docker ne lo stato, --selftest prova i file di servizio
 senza Docker.
+
+Simulazione: --simulate-iowait VAL e --simulate-load VAL sovrascrivono
+le metriche lette da Glances (utili per test senza carico reale).
 """
 
 import argparse
@@ -228,12 +232,14 @@ def check_service_files(services: list[dict], config: dict) -> bool:
         ok = False
     else:
         print(f"  url: {base_url}  metrica: {metric}")
-        value = get_glances_metric(config)
-        if value is None:
-            print("  X metrica non leggibile da Glances")
+        iowait_val, load_val = get_glances_metrics(config)
+        if iowait_val is not None:
+            print(f"  OK iowait={iowait_val:.1f}")
+        if load_val is not None:
+            print(f"  OK load={load_val:.1f}")
+        if iowait_val is None and load_val is None:
+            print("  X metriche non leggibili da Glances")
             ok = False
-        else:
-            print(f"  OK valore attuale: {metric}={value:.1f}")
 
     print(f"\n=== Esito: {'OK' if ok else 'ERRORI'} ===")
     return ok
@@ -257,8 +263,15 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
+    # In dry-run salviamo solo la finestra delle metriche (non lo stato operativo)
+    # cosi' la media mobile non riparte da zero a ogni giro.
     if DRY_RUN:
-        log.info("[dry-run] stato NON scritto")
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps({
+            "metric_window": state.get("metric_window", []),
+            "metric_window_load": state.get("metric_window_load", []),
+        }, indent=2))
+        log.info("[dry-run] stato NON scritto (solo metric_window)")
         return
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state, indent=2))
@@ -302,40 +315,57 @@ def _glances_get(base_url: str, path: str) -> dict | None:
     return None
 
 
-def get_glances_metric(config: dict) -> float | None:
-    """Legge iowait o load da Glances API. None se non leggibile.
+def get_glances_metrics(config: dict, sim_iowait: float | None = None, sim_load: float | None = None) -> tuple[float | None, float | None]:
+    """Legge iowait e load da Glances API. Ritorna (iowait, load), None se non leggibile.
 
     Da Glances 4.0 l'API e' /api/4/ (la /api/3/ non esiste piu': risponde
     404). I campi non stanno in `system`:
       - iowait  -> /api/4/cpu  (campo "iowait")
       - load    -> /api/4/load (campo "min1")
+
+    Se sim_iowait/sim_load sono forniti, li usa invece di Glances (simulazione).
     """
     base_url = config["glances"]["url"]
-    metric = config["monitor"]["metric"]
+    iowait_val = None
+    load_val = None
 
-    if metric == "iowait":
-        endpoint = "/cpu"
-        field = "iowait"
-    elif metric == "load":
-        endpoint = "/load"
-        field = "min1"
+    # --- iowait ---
+    if sim_iowait is not None:
+        iowait_val = float(sim_iowait)
+        log.info(f"Simulazione: iowait={iowait_val:.1f}")
     else:
-        log.error(f"Metrica sconosciuta: {metric} (atteso 'iowait' o 'load')")
-        return None
+        for api_version in ("4", "3"):
+            data = _glances_get(base_url, f"/api/{api_version}/cpu")
+            if data is None:
+                continue
+            if "iowait" not in data:
+                log.error(f"Glances /api/{api_version}/cpu non contiene il campo 'iowait'")
+                continue
+            iowait_val = float(data["iowait"])
+            log.info(f"Glances /api/{api_version}/cpu: iowait={iowait_val:.1f}")
+            break
 
-    for api_version in ("4", "3"):
-        data = _glances_get(base_url, f"/api/{api_version}{endpoint}")
-        if data is None:
-            continue
-        if field not in data:
-            log.error(f"Glances /api/{api_version}{endpoint} non contiene il campo '{field}'")
-            continue
-        value = float(data[field])
-        log.info(f"Glances /api/{api_version}{endpoint}: {field}={value:.1f}")
-        return value
+    # --- load ---
+    if sim_load is not None:
+        load_val = float(sim_load)
+        log.info(f"Simulazione: load={load_val:.1f}")
+    else:
+        for api_version in ("4", "3"):
+            data = _glances_get(base_url, f"/api/{api_version}/load")
+            if data is None:
+                continue
+            if "min1" not in data:
+                log.error(f"Glances /api/{api_version}/load non contiene il campo 'min1'")
+                continue
+            load_val = float(data["min1"])
+            log.info(f"Glances /api/{api_version}/load: min1={load_val:.1f}")
+            break
 
-    log.error(f"Impossibile leggere la metrica '{metric}' da Glances")
-    return None
+    if iowait_val is None and load_val is None:
+        log.error("Impossibile leggere nessuna metrica da Glances")
+        return None, None
+
+    return iowait_val, load_val
 
 # ─── Docker ────────────────────────────────────────────────────────────────
 
@@ -462,6 +492,10 @@ def main():
                         help="mostra cosa farebbe, senza toccare Docker ne lo stato")
     parser.add_argument("--no-dry-run", action="store_true",
                         help="esegue davvero (annulla DRY_RUN=true del compose)")
+    parser.add_argument("--simulate-iowait", type=float,
+                        help="simula un valore iowait (sovrascrive Glances)")
+    parser.add_argument("--simulate-load", type=float,
+                        help="simula un valore load (sovrascrive Glances)")
     args = parser.parse_args()
 
     if not CONFIG_PATH.exists():
@@ -496,33 +530,51 @@ def main():
     window_sec = config["monitor"]["window_sec"]
     stop_threshold = config["monitor"]["stop_threshold"]
     restart_threshold = config["monitor"]["restart_threshold"]
+    load_stop_threshold = config["monitor"]["load_stop_threshold"]
+    load_restart_threshold = config["monitor"]["load_restart_threshold"]
     recovery_wait = config["recovery"]["calm_duration_sec"]
     restart_delay = config["recovery"]["restart_delay_sec"]
 
     if "metric_window" not in state:
         state["metric_window"] = []
-    window = deque(state["metric_window"])
+    if "metric_window_load" not in state:
+        state["metric_window_load"] = []
+    window_iowait = deque(state["metric_window"])
+    window_load = deque(state["metric_window_load"])
 
-    metric_value = get_glances_metric(config)
-    if metric_value is None:
-        # Metrica non leggibile: non decidere nulla. Tornare 0.0 qui
+    iowait_val, load_val = get_glances_metrics(config, args.simulate_iowait, args.simulate_load)
+    if iowait_val is None and load_val is None:
+        # Metriche non leggibili: non decidere nulla. Tornare 0.0 qui
         # significherebbe "tutto ok", che era il bug originale.
-        log.error("Salto questo giro: metrica non leggibile")
+        log.error("Salto questo giro: metriche non leggibili")
         return
 
-    avg = update_window(window, metric_value, window_sec, sample_interval)
-    state["metric_window"] = list(window)
+    avg_iowait = update_window(window_iowait, iowait_val, window_sec, sample_interval) if iowait_val is not None else None
+    avg_load = update_window(window_load, load_val, window_sec, sample_interval) if load_val is not None else None
+
+    state["metric_window"] = list(window_iowait)
+    state["metric_window_load"] = list(window_load)
     save_state(state)
 
     now = datetime.now()
-    log.info(f"Check: {config['monitor']['metric']}={metric_value:.1f} media={avg:.1f} (stop>{stop_threshold}, restart<{restart_threshold})")
+
+    # Log metriche
+    log_parts = []
+    if iowait_val is not None:
+        log_parts.append(f"iowait={iowait_val:.1f}" + (f" media={avg_iowait:.1f}" if avg_iowait is not None else ""))
+    if load_val is not None:
+        log_parts.append(f"load={load_val:.1f}" + (f" media={avg_load:.1f}" if avg_load is not None else ""))
+    log.info(f"Check: {' | '.join(log_parts)} (stop>iowait:{stop_threshold} load:{load_stop_threshold}, restart<iowait:{restart_threshold} load:{load_restart_threshold})")
 
     # ── Recovery mode ────────────────────────────────────────────────────
     if state["mode"] == "recovery":
         elapsed = (now - datetime.fromisoformat(state["recovery_started_at"])).total_seconds()
         if elapsed >= recovery_wait:
-            if avg >= restart_threshold:
-                log.info(f"Recovery: ancora sopra la soglia ({avg:.1f}), attendo")
+            # Recovery: serve che ENTRAMBE le metriche siano sotto soglia
+            iowait_ok = (avg_iowait is None or avg_iowait < restart_threshold)
+            load_ok = (avg_load is None or avg_load < load_restart_threshold)
+            if not (iowait_ok and load_ok):
+                log.info(f"Recovery: ancora sopra soglia (iowait_media={avg_iowait:.1f if avg_iowait else 'N/A'}, load_media={avg_load:.1f if avg_load else 'N/A'}), attendo")
                 return
             if state["stopped_services"]:
                 service_name = state["stopped_services"][-1]
@@ -565,8 +617,12 @@ def main():
         return
 
     # ── Monitor mode ──────────────────────────────────────────────────────
-    if avg >= stop_threshold:
-        log.warning(f"ALLARME: media {avg:.1f} >= {stop_threshold}")
+    # Stop: scatta se UNA delle due metriche supera la soglia
+    iowait_alarm = avg_iowait is not None and avg_iowait >= stop_threshold
+    load_alarm = avg_load is not None and avg_load >= load_stop_threshold
+
+    if iowait_alarm or load_alarm:
+        log.warning(f"ALLARME: iowait_media={avg_iowait:.1f if avg_iowait else 'N/A'} (soglia {stop_threshold}), load_media={avg_load:.1f if avg_load else 'N/A'} (soglia {load_stop_threshold})")
 
         stopped = set(state["stopped_services"])
         failed = set(state.get("failed_stops", []))
@@ -597,25 +653,32 @@ def main():
 
             send_telegram(f"- {service['name']}", config)
 
-            new_avg = None
+            new_avg_iowait = None
+            new_avg_load = None
             if DRY_RUN:
-                # Senza un down reale non c'e' nulla da misurare: si usa la
-                # media corrente invece di riempire la finestra con un campione
+                # Senza un down reale non c'e' nulla da misurare: si usano le
+                # medie correnti invece di riempire la finestra con un campione
                 # inventato (e di crashare se il down fosse fallito).
                 log.info("[dry-run] nessun campionamento post-stop")
-                new_avg = avg
+                new_avg_iowait = avg_iowait
+                new_avg_load = avg_load
             else:
                 time.sleep(30)
-                new_value = get_glances_metric(config)
-                if new_value is None:
-                    log.error("Post-stop: metrica non leggibile, valuto al prossimo giro")
+                new_iowait, new_load = get_glances_metrics(config, args.simulate_iowait, args.simulate_load)
+                if new_iowait is None and new_load is None:
+                    log.error("Post-stop: metriche non leggibili, valuto al prossimo giro")
                     return
-                new_avg = update_window(window, new_value, window_sec, sample_interval)
-                state["metric_window"] = list(window)
+                new_avg_iowait = update_window(window_iowait, new_iowait, window_sec, sample_interval) if new_iowait is not None else None
+                new_avg_load = update_window(window_load, new_load, window_sec, sample_interval) if new_load is not None else None
+                state["metric_window"] = list(window_iowait)
+                state["metric_window_load"] = list(window_load)
                 save_state(state)
-                log.info(f"Post-stop {service['name']}: media={new_avg:.1f}")
+                log.info(f"Post-stop {service['name']}: iowait_media={new_avg_iowait:.1f if new_avg_iowait else 'N/A'}, load_media={new_avg_load:.1f if new_avg_load else 'N/A'}")
 
-            if new_avg < stop_threshold:
+            # Recovery se ENTRAMBE sotto soglia
+            iowait_ok = (new_avg_iowait is None or new_avg_iowait < stop_threshold)
+            load_ok = (new_avg_load is None or new_avg_load < load_stop_threshold)
+            if iowait_ok and load_ok:
                 log.info("Migliorato! Entro in recovery mode")
                 state["mode"] = "recovery"
                 state["recovery_started_at"] = now.isoformat()
@@ -630,7 +693,8 @@ def main():
             state["failed_stops"] = state["failed_stops"][-20:]
             save_state(state)
     elif state["stopped_services"]:
-        log.info("Media tornata sotto soglia, entro in recovery mode")
+        # Se c'erano servizi fermati ma le metriche sono scese, entra in recovery
+        log.info("Metriche tornate sotto soglia, entro in recovery mode")
         state["mode"] = "recovery"
         state["recovery_started_at"] = now.isoformat()
         save_state(state)
