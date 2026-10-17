@@ -14,6 +14,7 @@ import logging
 import sys
 import tokenize
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,7 +31,6 @@ SPEC.loader.exec_module(MODULE)
 
 # ─── Media mobile ────────────────────────────────────────────────────────────
 
-
 def test_update_window_campiona_e_limita_la_finestra():
     window = deque()
     assert MODULE.update_window(window, 10.0, 120, 30) == 10.0
@@ -43,19 +43,16 @@ def test_update_window_campiona_e_limita_la_finestra():
     assert MODULE.update_window(window, 50.0, 120, 30) == 35.0
     assert list(window) == [20.0, 30.0, 40.0, 50.0]
 
-
 def test_update_window_vuota_non_divide_per_zero():
     assert MODULE.update_window(deque(), 5.0, 120, 30) == 5.0
 
 
 # ─── Config servizi ──────────────────────────────────────────────────────────
 
-
 def _write(tmp_path: Path, name: str, body: str) -> Path:
     path = tmp_path / name
     path.write_text(body)
     return path
-
 
 def test_load_services_ordina_per_priorita(tmp_path):
     _write(tmp_path, "b.yaml", "name: b\npriority: 50\ncompose_dir: /x\n")
@@ -65,7 +62,6 @@ def test_load_services_ordina_per_priorita(tmp_path):
     services = MODULE.load_services(tmp_path)
 
     assert [s["name"] for s in services] == ["a", "c", "b"]
-
 
 def test_load_services_flag_default(tmp_path):
     _write(tmp_path, "a.yaml", "name: a\ncompose_dir: /x\n")
@@ -79,7 +75,6 @@ def test_load_services_flag_default(tmp_path):
     # service_name assente = il nome del servizio
     assert service["service_names"] == ["a"]
 
-
 def test_load_services_accetta_nomi_multipli(tmp_path):
     _write(
         tmp_path,
@@ -92,7 +87,6 @@ def test_load_services_accetta_nomi_multipli(tmp_path):
         "suwayomi-nsfw",
     ]
 
-
 def test_load_services_scarta_file_vuoto(tmp_path):
     _write(tmp_path, "empty.yaml", "")
     _write(tmp_path, "ok.yaml", "name: ok\ncompose_dir: /x\n")
@@ -101,25 +95,21 @@ def test_load_services_scarta_file_vuoto(tmp_path):
 
     assert names == ["ok"]
 
-
 def test_load_services_scarta_senza_nome(tmp_path):
     _write(tmp_path, "bad.yaml", "priority: 10\ncompose_dir: /x\n")
 
     assert MODULE.load_services(tmp_path) == []
-
 
 def test_load_services_ignora_yaml_non_mapping(tmp_path):
     _write(tmp_path, "list.yaml", "- uno\n- due\n")
 
     assert MODULE.load_services(tmp_path) == []
 
-
 def test_load_services_directory_mancante():
     assert MODULE.load_services(Path("/non-esiste")) == []
 
 
 # ─── Matching dei container ───────────────────────────────────────────────────
-
 
 def test_running_containers_confronto_esatto(monkeypatch):
     # Il vecchio 'name=X' matchava per sottostringa: sonarr matchava anche
@@ -143,7 +133,6 @@ def test_running_containers_confronto_esatto(monkeypatch):
     # senza nomi non si chiama nemmeno docker
     assert MODULE.running_containers([]) == []
 
-
 def test_running_containers_non_crasha_senza_cli_docker(monkeypatch):
     """Senza il binario docker nel PATH il modulo non deve crashare.
 
@@ -160,7 +149,6 @@ def test_running_containers_non_crasha_senza_cli_docker(monkeypatch):
 
     assert MODULE.running_containers(["sonarr"]) == []
 
-
 def test_is_service_running_false_senza_cli_docker(monkeypatch):
     """Senza CLI docker il servizio non e' 'in esecuzione': meglio non riavviarlo."""
     err_msg = "[Errno 2] No such file or directory: 'docker'"
@@ -172,7 +160,6 @@ def test_is_service_running_false_senza_cli_docker(monkeypatch):
 
     service = {"name": "x", "service_names": ["x-app-1"]}
     assert MODULE.is_service_running(service) is False
-
 
 def test_is_service_running_true_con_un_container():
     service = {"name": "x", "service_names": ["x-app-1"]}
@@ -186,7 +173,6 @@ def test_is_service_running_true_con_un_container():
 
 
 # ─── Default per chiavi mancanti ─────────────────────────────────────────────
-
 
 def test_config_vecchio_senza_chiavi_nuove():
     """Un config senza le chiavi aggiunte dopo non deve sollevare KeyError.
@@ -213,6 +199,15 @@ def test_config_vecchio_senza_chiavi_nuove():
     # le chiavi presenti non vengono toccate
     assert merged["monitor"]["stop_threshold"] == 80.0
 
+def test_config_con_incidents_default():
+    """Un config senza la sezione incidents usa i valori di default."""
+    config_vecchio = {"glances": {"url": "http://x"}}
+
+    merged = MODULE._merge_defaults(config_vecchio)
+
+    assert merged["incidents"]["enabled"] is True
+    assert merged["incidents"]["log_tail"] == 20000
+    assert merged["incidents"]["log_window_min"] == 15
 
 def test_stato_parziale_non_crasha():
     """Uno stato scritto da una versione precedente non deve rompere il health check.
@@ -229,7 +224,6 @@ def test_stato_parziale_non_crasha():
     # il health check deve poterlo leggere senza KeyError
     assert set(normalized["stopped_services"]) == set()
 
-
 def test_load_state_con_file_illeggibile(tmp_path, monkeypatch):
     """Uno stato corrotto non deve bloccare il container."""
     state_path = tmp_path / "state.json"
@@ -240,7 +234,6 @@ def test_load_state_con_file_illeggibile(tmp_path, monkeypatch):
 
     assert state["mode"] == "monitor"
     assert state["stopped_services"] == []
-
 
 def test_load_state_con_json_non_dict(tmp_path, monkeypatch):
     """Un JSON valido ma non un object (es. una lista) non deve bloccare."""
@@ -255,7 +248,6 @@ def test_load_state_con_json_non_dict(tmp_path, monkeypatch):
 
 # ─── Immagine: dipendenze di sistema ─────────────────────────────────────────
 
-
 def test_il_dockerfile_installa_il_cli_docker():
     """Il downscaler chiama il CLI docker: deve essere nell'immagine.
 
@@ -265,7 +257,6 @@ def test_il_dockerfile_installa_il_cli_docker():
     dockerfile = (REPO / "Dockerfile").read_text()
 
     assert "docker-cli" in dockerfile, "il Dockerfile deve installare docker-cli"
-
 
 def test_il_dockerfile_installa_il_plugin_compose():
     """`docker compose` e' un PLUGIN: serve docker-cli-compose, non solo docker-cli.
@@ -280,7 +271,6 @@ def test_il_dockerfile_installa_il_plugin_compose():
         "il Dockerfile deve installare docker-cli-compose (plugin Compose)"
     )
 
-
 def test_il_compose_monta_il_socket_docker():
     """Il CLI docker parla col daemon attraverso il socket montato dal compose."""
     compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())
@@ -292,7 +282,6 @@ def test_il_compose_monta_il_socket_docker():
         assert any("docker.sock" in str(m) for m in mounts), (
             f"{name}: manca il mount del socket docker"
         )
-
 
 def test_il_compose_monta_le_directory_dei_servizi():
     """I compose_dir dei file servizio sono path assoluti dell'HOST.
@@ -313,7 +302,6 @@ def test_il_compose_monta_le_directory_dei_servizi():
 
 
 # ─── Config d'esempio del repo ───────────────────────────────────────────────
-
 
 def test_i_file_di_esempio_sono_tutti_validi():
     """Controlla i file di servizio d'esempio.
@@ -340,7 +328,6 @@ def test_i_file_di_esempio_sono_tutti_validi():
             f"{path.name}: compose_dir deve essere un path assoluto"
         )
 
-
 def test_config_yaml_del_repo_e_valido():
     data = yaml.safe_load((REPO / "config.yaml").read_text())
 
@@ -351,7 +338,6 @@ def test_config_yaml_del_repo_e_valido():
     # le chiavi nuove esistono nel config del repo (altrimenti il default le copre)
     assert "load_stop_threshold" in data["monitor"]
     assert "load_restart_threshold" in data["monitor"]
-
 
 def test_nessun_compose_con_placeholder_nella_struttura():
     """Il compose non deve usare interpolazione ne build locale.
@@ -372,7 +358,6 @@ def test_nessun_compose_con_placeholder_nella_struttura():
 
 
 # ─── Formattazione delle metriche nei log ───────────────────────────────────
-
 
 def test_fmt_metric_formatta_e_gestisce_il_mancante():
     """0.0 e' un valore valido: non deve diventare 'N/A'."""
@@ -427,7 +412,6 @@ def test_allarme_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
     assert "ALLARME: iowait_media=5.0" in testo
     assert "load_media=430.0" in testo
 
-
 def test_recovery_logga_invece_di_crasha(tmp_path, monkeypatch, caplog):
     """Anche il ramo di recovery deve loggare, non sollevare ValueError.
 
@@ -464,10 +448,9 @@ def _solo_codice(percorso: Path) -> str:
     un falso positivo.
     """
     with percorso.open(encoding="utf-8") as handle:
-        token = list(tokenize.generate_tokens(handle.readline))
+        tokens = list(tokenize.generate_tokens(handle.readline))
     saltati = (tokenize.COMMENT, tokenize.STRING)
-    return "".join(tok.string for tok in token if tok.type not in saltati)
-
+    return "".join(tok.string for tok in tokens if tok.type not in saltati)
 
 def test_nessun_format_specifier_con_condizione():
     """Un selettore di formato non puo' contenere una condizione.
@@ -477,3 +460,87 @@ def test_nessun_format_specifier_con_condizione():
     fmt_metric cita il pattern per spiegarlo.
     """
     assert ".1f if " not in _solo_codice(REPO / "emergency-stop.py")
+
+
+# ─── Incident snapshots ─────────────────────────────────────────────────────
+
+def test_collect_incident_snapshot_salva_log_e_metriche(tmp_path, monkeypatch):
+    """collect_incident_snapshot salva log, metrics e summary."""
+    services = [
+        {"name": "radarr", "service_names": ["radarr-radarr-1"]},
+        {"name": "sonarr", "service_names": ["sonarr"]},
+    ]
+
+    log_calls = []
+    def fake_run(*args, **kwargs):
+        log_calls.append(args[0])
+        return SimpleNamespace(returncode=0, stdout="log line", stderr="")
+
+    monkeypatch.setattr(MODULE.subprocess, "run", fake_run)
+    monkeypatch.setattr(MODULE, "get_glances_metrics", lambda config: (5.0, 430.0))
+
+    config = {
+        "incidents": {
+            "dir": str(tmp_path / "incidents"),
+            "log_tail": 20000,
+            "log_window_min": 15,
+        },
+        "glances": {"url": "http://x"},
+    }
+
+    state = {
+        "mode": "monitor",
+        "incident_services": ["radarr"],
+    }
+
+    now = datetime(2026, 10, 17, 22, 30, 15)
+    result = MODULE.collect_incident_snapshot(config, services, state, now, "start")
+
+    expected = tmp_path / "incidents" / "2026-10-17_22-30-15"
+    assert result == expected
+    assert (expected / "radarr-radarr-1.log").exists()
+    assert (expected / "sonarr.log").exists()
+    assert (expected / "metrics.json").exists()
+    assert (expected / "summary.txt").exists()
+    # 2 container, 2 chiamate a docker logs
+    assert len(log_calls) == 2
+
+
+def test_collect_incident_snapshot_disabilitato_non_fa_nulla(tmp_path, monkeypatch):
+    """Con incidents.enabled false, non salva nulla."""
+    config = {"incidents": {"enabled": False, "dir": str(tmp_path)}}
+    result = MODULE.collect_incident_snapshot(config, [], {}, datetime(2026, 1, 1), "start")
+    assert result is None
+    assert not (tmp_path / "2026-01-01_00-00-00").exists()
+
+
+def test_send_incident_report_manda_telegram(tmp_path, monkeypatch):
+    """send_incident_report invia il report con path e durata."""
+    calls = []
+    monkeypatch.setattr(MODULE, "send_telegram", lambda msg, config: calls.append(msg))
+
+    snapshot_dir = tmp_path / "incidents" / "2026-10-17_22-30-15"
+    state = {
+        "incident_start": "2026-10-17T22:00:00",
+        "incident_services": ["radarr", "sonarr"],
+    }
+    config = {"incidents": {"telegram_report": True}}
+
+    MODULE.send_incident_report(snapshot_dir, state, config)
+
+    assert len(calls) == 1
+    assert "Incidente risolto" in calls[0]
+    assert "radarr" in calls[0]
+    assert "sonarr" in calls[0]
+    assert str(snapshot_dir) in calls[0]
+
+
+def test_send_incident_report_disabilitato_non_manda_nulla(monkeypatch):
+    """Con incidents.telegram_report false, non invia nulla."""
+    calls = []
+    monkeypatch.setattr(MODULE, "send_telegram", lambda msg, config: calls.append(msg))
+
+    config = {"incidents": {"telegram_report": False}}
+    MODULE.send_incident_report(Path("/tmp/x"), {}, config)
+
+    assert calls == []

@@ -11,6 +11,7 @@ Logica:
 4. Stop graduale: un servizio alla volta, poi passa al successivo
 5. Recovery graduale: un servizio ogni restart_delay, solo a metriche calate
 6. Notifiche Telegram: inizio downscale, inizio recovery, fine incidente
+7. Snapshot incidente: log e metriche salvati su disco per analisi post-incidente
 
 Dentro il container (mount dal compose):
   config:   /app/config.yaml
@@ -22,6 +23,7 @@ Sulla macchina host:
   compose:  /mnt/applicazioni/yml/docker/emergency-stop/docker-compose.yml
   servizi:  /mnt/applicazioni/yml/docker/emergency-stop/services/*.yaml
   log:      /var/log/emergency-stop.log
+  incidenti: /mnt/applicazioni/yml/docker/emergency-stop/incidents/<timestamp>/
 
 Modalita': --validate controlla la config, --dry-run mostra cosa farebbe
 senza toccare Docker ne lo stato, --selftest prova i file di servizio
@@ -39,7 +41,7 @@ import subprocess
 import sys
 import time
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -62,7 +64,7 @@ DEFAULT_PRIORITY = 100
 # Un config vecchio (manca una chiave aggiunta dopo) non deve far crashare
 # il container: le chiavi assenti prendono questi valori.
 # Fonte dell'errore che questo risolve: KeyError: 'load_stop_threshold'
-# e KeyError: 'stopped_services' (stato parziale scritto in dry-run).
+# e KeyError: 'stopped_services' (stato parzialo scritto in dry-run).
 DEFAULTS = {
     "monitor": {
         "metric": "iowait",
@@ -86,9 +88,16 @@ DEFAULTS = {
     "glances": {
         "url": "",
     },
+    "incidents": {
+        "enabled": True,
+        "dir": "/mnt/applicazioni/yml/docker/emergency-stop/incidents",
+        "telegram_report": True,
+        "log_tail": 20000,
+        "log_window_min": 15,
+    },
 }
 
-# Chiavi dello stato con il loro valore iniziale: uno stato parziale
+# Chiavi dello stato con il loro valore iniziale: uno stato parzialo
 # (es. scritto in dry-run prima di questa regola) viene completato.
 STATE_DEFAULTS = {
     "mode": "monitor",
@@ -137,7 +146,7 @@ def _merge_defaults(config: dict) -> dict:
 
 
 def _normalize_state(state: dict) -> dict:
-    """Completa uno stato parziale con le chiavi mancanti (STATE_DEFAULTS)."""
+    """Completa uno stato parzialo con le chiavi mancanti (STATE_DEFAULTS)."""
     normalized = dict(STATE_DEFAULTS)
     normalized.update(state)
     return normalized
@@ -183,7 +192,6 @@ log = logging.getLogger("emergency-stop")
 DRY_RUN = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes", "on")
 
 # ─── Config servizi ────────────────────────────────────────────────────────
-
 
 def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
     """Legge i file di servizio e li ordina per priorita' (piu' bassa = prima)."""
@@ -237,7 +245,6 @@ def load_services(services_dir: Path, log_missing: bool = True) -> list[dict]:
 
     services.sort(key=lambda s: s["priority"])
     return services
-
 
 def check_service_files(services: list[dict], config: dict) -> bool:
     """Controlla i file di servizio. Ritorna True se tutto ok.
@@ -327,7 +334,6 @@ def load_state() -> dict:
         except JSON_ERRORS as e:
             log.error(f"Stato illeggibile ({STATE_PATH}: {e}), riparto da zero")
     return state
-
 
 def save_state(state: dict):
     """Salva lo stato.
@@ -444,7 +450,6 @@ def _docker_available() -> bool:
     """
     return Path("/usr/bin/docker").exists() or _which("docker") is not None
 
-
 def _which(program: str) -> str | None:
     """Percorso dell'eseguibile in PATH, o None se assente."""
     for directory in os.environ.get("PATH", "").split(os.pathsep):
@@ -452,7 +457,6 @@ def _which(program: str) -> str | None:
         if candidate.is_file():
             return str(candidate)
     return None
-
 
 def running_containers(service_names: list[str]) -> list[str]:
     """Container in esecuzione il cui nome e' in `service_names` (confronto esatto).
@@ -473,17 +477,14 @@ def running_containers(service_names: list[str]) -> list[str]:
     wanted = set(service_names)
     return [line.strip() for line in ps.stdout.splitlines() if line.strip() in wanted]
 
-
 def is_service_running(service: dict) -> bool:
     """True se almeno un container del servizio e' in esecuzione."""
     return bool(running_containers(service["service_names"]))
-
 
 def _compose_cmd(service: dict) -> list[str]:
     return [
         "docker", "compose", "-f", str(service["compose_dir"] / service["compose_file"]),
     ]
-
 
 def stop_service(service: dict) -> bool:
     """Ferma un servizio con docker compose down (mai in --dry-run)."""
@@ -502,7 +503,6 @@ def stop_service(service: dict) -> bool:
         return False
     log.info(f"OK {service['name']} spento correttamente")
     return True
-
 
 def start_service(service: dict) -> bool:
     """Riaccende un servizio con docker compose up -d (mai in --dry-run)."""
@@ -556,6 +556,92 @@ def fmt_metric(value: float | None) -> str:
     trattato 0.0 come valore mancante.
     """
     return f"{value:.1f}" if value is not None else "N/A"
+
+# ─── Incident snapshots ───────────────────────────────────────────────────
+
+def collect_incident_snapshot(config: dict, services: list[dict], state: dict, now: datetime, phase: str) -> Path | None:
+    """Raccoglie log e metriche dell'incidente e li salva su disco.
+
+    phase: "start" (prima del primo stop) o "end" (fine recovery).
+    Ritorna il path della cartella snapshot, o None se disabilitato.
+    """
+    incidents_config = config.get("incidents", {})
+    if not incidents_config.get("enabled", True):
+        return None
+
+    log_dir = Path(incidents_config.get("dir", "/app/incidents"))
+    log_tail = incidents_config.get("log_tail", 20000)
+    log_window = incidents_config.get("log_window_min", 15)
+
+    timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+    snapshot_dir = log_dir / timestamp
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    # Finestra temporale: da log_window minuti fa ad ora
+    window_start = (now - timedelta(minutes=log_window)).isoformat()
+    window_end = now.isoformat()
+
+    # Tutti i container dei servizi gestiti
+    all_containers = set()
+    for service in services:
+        all_containers.update(service["service_names"])
+
+    for container in sorted(all_containers):
+        log_file = snapshot_dir / f"{container}.log"
+        try:
+            result = subprocess.run(
+                ["docker", "logs", "--since", window_start, "--until", window_end, "--tail", str(log_tail), container],
+                check=False, capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode == 0:
+                log_file.write_text(result.stdout)
+            else:
+                log_file.write_text(f"[errore: {result.stderr.strip()}]")
+        except (subprocess.TimeoutExpired, OSError) as e:
+            log_file.write_text(f"[errore: {e}]")
+
+    # Snapshot metriche
+    iowait_val, load_val = get_glances_metrics(config)
+    metrics = {
+        "timestamp": now.isoformat(),
+        "phase": phase,
+        "iowait": iowait_val,
+        "load": load_val,
+        "stopped_services": list(state.get("incident_services", [])),
+    }
+    (snapshot_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+
+    # Summary
+    summary_lines = [
+        f"Incidente {phase}",
+        f"Timestamp: {now.isoformat()}",
+        f"Finestra log: {window_start} → {window_end}",
+        f"Servizi fermati: {', '.join(state.get('incident_services', []))}",
+        f"Container: {', '.join(sorted(all_containers))}",
+    ]
+    (snapshot_dir / "summary.txt").write_text("\n".join(summary_lines))
+
+    log.info(f"Snapshot incidente salvato in {snapshot_dir}")
+    return snapshot_dir
+
+
+def send_incident_report(snapshot_dir: Path, state: dict, config: dict):
+    """Invia report Telegram con riepilogo e path dei log."""
+    incidents_config = config.get("incidents", {})
+    if not incidents_config.get("telegram_report", True):
+        return
+
+    incident_start = datetime.fromisoformat(state["incident_start"])
+    incident_end = datetime.now()
+    duration_min = (incident_end - incident_start).total_seconds() / 60
+    num_services = len(state.get("incident_services", []))
+
+    message = (
+        f"✅ Incidente risolto — {duration_min:.0f} minuti\n"
+        f"Servizi fermati: {num_services}\n"
+        f"Log: {snapshot_dir}"
+    )
+    send_telegram(message, config)
 
 # ─── Main loop ─────────────────────────────────────────────────────────────
 
@@ -673,6 +759,12 @@ def main():
                 incident_start = datetime.fromisoformat(state["incident_start"])
                 duration_min = (incident_end - incident_start).total_seconds() / 60
                 num_services = len(state["incident_services"])
+
+                # Raccogli snapshot finale e invia report
+                snapshot_dir = collect_incident_snapshot(config, services, state, incident_end, "end")
+                if snapshot_dir:
+                    send_incident_report(snapshot_dir, state, config)
+
                 send_telegram(
                     f"FINE INCIDENTE\n"
                     f"durata: {duration_min:.0f} minuti\n"
@@ -699,6 +791,13 @@ def main():
     if iowait_alarm or load_alarm:
         log.warning(f"ALLARME: iowait_media={fmt_metric(avg_iowait)} (soglia {stop_threshold}), load_media={fmt_metric(avg_load)} (soglia {load_stop_threshold})")
 
+        # Primo stop dell'incidente: raccogli snapshot iniziale
+        if not state["incident_start"]:
+            state["incident_start"] = now.isoformat()
+            state["incident_services"] = []
+            send_telegram("ALLARME: inizio downscale", config)
+            collect_incident_snapshot(config, services, state, now, "start")
+
         stopped = set(state.get("stopped_services", []))
         failed = set(state.get("failed_stops", []))
         candidates = [
@@ -715,11 +814,6 @@ def main():
         log.info(f"Tentativo stop: {service['name']}")
 
         if stop_service(service):
-            if not state["stopped_services"]:
-                state["incident_start"] = now.isoformat()
-                state["incident_services"] = []
-                send_telegram("ALLARME: inizio downscale", config)
-
             state["stopped_services"].append(service["name"])
             state["incident_services"].append(service["name"])
             state["last_alarm_time"] = now.isoformat()

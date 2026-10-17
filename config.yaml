@@ -25,3 +25,10 @@ telegram:
   enabled: false                 # true = notifiche attive
   bot_token: "INSERISCI_BOT_TOKEN"
   chat_id: "INSERISCI_CHAT_ID"
+
+incidents:
+  enabled: true                 # raccogli log e metriche durante l'incidente
+  dir: "/mnt/applicazioni/yml/docker/emergency-stop/incidents"
+  telegram_report: true         # invia report Telegram alla fine dell'incidente
+  log_tail: 20000               # max righe di log per container
+  log_window_min: 15            # finestra log prima/dopo l'incidente (minuti)
