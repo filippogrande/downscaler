@@ -6,6 +6,10 @@
 # Le eccezioni per codice stanno in per-file-ignores, non in ignore
 # globale: un ignore globale toglierebbe la regola anche ai test, dove
 # invece serve.
+#
+# Nota: ogni codice elencato qui e' stato visto nell'output di ruff.
+# Un selettore inesistente (es. DAR, SUB) fa fallire ruff con exit 2,
+# quindi non si aggiunge un codice 'per sicurezza'.
 
 target-version = "py312"
 
@@ -25,6 +29,8 @@ ignore = [
     # sola per coppia, altrimenti ruff stampa un warning e ne ignora una.
     "D203",
     "D212",
+    # T20: print nel codice (il tool usa stdout per i messaggi utente)
+    "T20",
 ]
 
 [lint.per-file-ignores]
@@ -35,7 +41,6 @@ ignore = [
     "EXE001",
     # Typing moderno / compatibilita' con Python piu' vecchi
     "FA",
-    # Standard library typing (list[str] vs List[str])
     "UP006",
     "UP007",
     # Logging: il codice passa le variabili come argomenti per design
@@ -45,7 +50,6 @@ ignore = [
     "S603",
     "S607",
     "PLW1510",
-    "SUB",
     # Eccezioni ampie: il codice le cattura per degradare con un log
     "BLE001",
     "TRY",
