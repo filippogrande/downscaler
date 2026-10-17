@@ -1,0 +1,10 @@
+name: airtrail
+compose_dir: /mnt/applicazioni/yml/docker/airtrail
+compose_file: docker-compose.yml
+service_name:
+  - airtrail-airtrail-1
+can_stop: false
+can_restart: false
+one_shot: false
+priority: 120
+note: "NESSUN container in esecuzione al 17/10/26 (solo la dir): can_stop/can_restart=false, da riabilitare quando gira"
