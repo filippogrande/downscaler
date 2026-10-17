@@ -82,10 +82,18 @@ def _setup_logging():
 
     Se il file di log non esiste lo crea: con un bind-mount su un file inesistente
     Docker crea una DIRECTORY, e FileHandler fallirebbe con IsADirectoryError.
+
+    Il log e' un dettaglio secondario: se la directory non e' scrivibile (es.
+    l'utente root in CI, dove /app non esiste) si logga su stdout e basta,
+    invece di far fallire l'import del modulo.
     """
-    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not LOG_PATH.exists():
-        LOG_PATH.touch()
+    try:
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if not LOG_PATH.exists():
+            LOG_PATH.touch()
+    except OSError as e:
+        print(f"ATTENZIONE: impossibile creare il file di log {LOG_PATH}: {e}", file=sys.stderr)
+
     handlers = [logging.StreamHandler(sys.stdout)]
     try:
         handlers.append(logging.FileHandler(LOG_PATH))
