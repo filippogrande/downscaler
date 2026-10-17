@@ -83,24 +83,55 @@ def send_telegram(message: str, config: dict):
 
 # ─── Glances ─────────────────────────────────────────────────────────────────
 
-def get_glances_metric(config: dict) -> float:
-    """Legge iowait o load da Glances API."""
-    url = f"{config['glances']['url']}/api/3/system"
+def _glances_get(base_url: str, path: str) -> dict | None:
+    """GET /api/<ver>/<path> su Glances. Ritorna il dict, o None se non raggiungibile."""
+    url = f"{base_url.rstrip('/')}{path}"
     try:
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
-        data = resp.json()
-        metric = config["monitor"]["metric"]
-        if metric == "iowait":
-            return float(data.get("iowait", 0))
-        elif metric == "load":
-            return float(data.get("load1", 0))
-        else:
-            log.error(f"Metrica sconosciuta: {metric}")
-            return 0.0
+        return resp.json()
+    except requests.HTTPError as e:
+        log.warning(f"Glances risponde {e.response.status_code} su {path}")
     except Exception as e:
-        log.warning(f"Glances non raggiungibile: {e}")
+        log.warning(f"Glances non raggiungibile su {path}: {e}")
+    return None
+
+
+def get_glances_metric(config: dict) -> float:
+    """Legge iowait o load da Glances API.
+
+    Da Glances 4.0 l'API è /api/4/ (la /api/3/ non esiste più: risponde
+    404). I campi non stanno in `system`:
+      - iowait  → /api/4/cpu  (campo "iowait")
+      - load    → /api/4/load (campo "min1")
+    """
+    base_url = config["glances"]["url"]
+    metric = config["monitor"]["metric"]
+
+    # endpoint e campo per metrica: (percorso su /api/4/, campo, fallback /api/3/)
+    if metric == "iowait":
+        endpoint = "/cpu"
+        field = "iowait"
+    elif metric == "load":
+        endpoint = "/load"
+        field = "min1"
+    else:
+        log.error(f"Metrica sconosciuta: {metric} (atteso 'iowait' o 'load')")
         return 0.0
+
+    for api_version in ("4", "3"):
+        data = _glances_get(base_url, f"/api/{api_version}{endpoint}")
+        if data is None:
+            continue
+        if field not in data:
+            log.error(f"Glances /api/{api_version}{endpoint} non contiene il campo '{field}'")
+            continue
+        value = float(data[field])
+        log.info(f"Glances /api/{api_version}{endpoint}: {field}={value:.1f}")
+        return value
+
+    log.error(f"Impossibile leggere la metrica '{metric}' da Glances: valore trattato come 0.0")
+    return 0.0
 
 # ─── Docker ──────────────────────────────────────────────────────────────────
 
