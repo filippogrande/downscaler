@@ -1,0 +1,15 @@
+name: langfuse
+compose_dir: /mnt/applicazioni/yml/docker/langfuse
+compose_file: docker-compose.yml
+service_name:
+  - langfuse-langfuse-web-1
+  - langfuse-postgres-1
+  - langfuse-clickhouse-1
+  - langfuse-redis-1
+  - langfuse-minio-1
+  - langfuse-worker-1
+can_stop: false
+can_restart: false
+one_shot: false
+priority: 180
+note: "NESSUN container in esecuzione al 17/10/26: can_stop/can_restart=false finche' non gira"
