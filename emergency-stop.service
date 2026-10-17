@@ -5,10 +5,10 @@ Wants=docker.service
 
 [Service]
 Type=oneshot
-# Verifica le dipendenze PRIMA di eseguire: senza questo, se requests/yaml
-# mancano ogni run fallisce con ModuleNotFoundError e il timer va in errore.
-ExecStartPre=/usr/bin/python3 -c "import requests, yaml"
-ExecStart=/usr/bin/python3 /mnt/applicazioni/emergency-stop/emergency-stop.py
+# Il venv e' creato da install.sh: qui si usa il suo python, non quello di sistema
+# (Debian blocca l'installazione globale con PEP 668).
+ExecStartPre=/mnt/applicazioni/emergency-stop/venv/bin/python -c "import requests, yaml"
+ExecStart=/mnt/applicazioni/emergency-stop/venv/bin/python /mnt/applicazioni/emergency-stop/emergency-stop.py
 User=root
 WorkingDirectory=/etc/emergency-stop
 
