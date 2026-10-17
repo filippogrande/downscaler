@@ -19,7 +19,7 @@ ignore = [
     "I",
     # UP: suggerimenti di modernizzazione (typing moderno, pathlib, ...)
     "UP",
-    # COM812: virgola finale mancante (gestione a carico di black/formatter)
+    # COM812: virgola finale mancante (gestione a carico del formatter)
     "COM812",
     # D203/D211 e D212/D213 sono coppie incompatibili: se ne tiene una
     # sola per coppia, altrimenti ruff stampa un warning e ne ignora una.
@@ -33,18 +33,17 @@ ignore = [
 # via GitHub MCP.
 "emergency-stop.py" = [
     "EXE001",
-    # Typing moderno
+    # Typing moderno / compatibilita' con Python piu' vecchi
     "FA",
-    # Standard library typing (list[str] -> List[str])" ,
+    # Standard library typing (list[str] vs List[str])
     "UP006",
     "UP007",
-    # Logging
+    # Logging: il codice passa le variabili come argomenti per design
     "G",
     "LOG",
-    # Security: subprocess senza shell=True (ok), banda bassa
+    # subprocess con lista (nessun shell=True) e check=False voluto
     "S603",
     "S607",
-    # subprocess.check=False va bene per controllare il returncode
     "PLW1510",
     "SUB",
     # Eccezioni ampie: il codice le cattura per degradare con un log
@@ -54,9 +53,8 @@ ignore = [
     "FBT",
     # f-string senza placeholder
     "F541",
-    # Comandi docker in lista: ok (nessun shell)
-    "S603",
 ]
+
 # tests/: i test usano fixture di pytest e nomi volutamente semplici.
 "tests/*" = [
     "ANN",
