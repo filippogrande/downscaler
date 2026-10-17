@@ -7,36 +7,37 @@ poi li riaccende gradualmente dopo 5 min di calma.
 ## Installazione
 
 ```bash
-# 1. Clona il repo
-cd /mnt/applicazioni
-git clone https://github.com/filippogrande/downscaler.git emergency-stop-repo
-
-# 2. Crea la cartella di deploy
+# 1. Crea la cartella di deploy
 mkdir -p /mnt/applicazioni/yml/docker/emergency-stop/services
 cd /mnt/applicazioni/yml/docker/emergency-stop
 
-# 3. Copia i file di deploy
+# 2. Copia i file dal repo
 cp /mnt/applicazioni/emergency-stop-repo/docker-compose.yml .
 cp /mnt/applicazioni/emergency-stop-repo/config.yaml .
 cp -r /mnt/applicazioni/emergency-stop-repo/examples/services/* services/
 
-# 4. Prima avvio: in DRY_RUN, non spegne nulla
+# 3. Prima avvio: DRY_RUN=true, non spegne nulla
 docker compose up -d
 docker logs -f emergency-stop
 ```
 
-**La cartella di deploy** (`/mnt/applicazioni/yml/docker/emergency-stop/`):
+**Nessun build locale**: l'immagine la builda GitHub Actions a ogni merge su `main`
+(workflow *Docker Build & Push*) e il compose fa solo **pull** da Docker Hub.
+
+## La cartella di deploy
+
+`/mnt/applicazioni/yml/docker/emergency-stop/`:
 
 | File | Contenuto |
 |---|---|
-| `docker-compose.yml` | valori letterali, niente `${}` |
+| `docker-compose.yml` | valori letterali, niente `${}`, nessun `build:` |
 | `config.yaml` | soglie, Glances, Telegram |
 | `services/<nome>.yaml` | un file per servizio |
 
 ## Il primo avvio è sicuro
 
-`docker-compose.yml` ha `DRY_RUN: "true"` **scritto letteralmente**: il container
-gira, legge la metrica, stampa cosa farebbe e **non spegne niente**.
+`docker-compose.yml` ha `DRY_RUN: "true"` **scritto letteralmente**: il container gira,
+legge la metrica, stampa cosa farebbe e **non spegne niente**.
 
 Per farlo lavorare davvero:
 
@@ -49,17 +50,28 @@ docker compose up -d
 richiede restart. Solo `DRY_RUN` è una env var, quindi per cambiarlo serve
 `docker compose up -d`.
 
-## Test singoli (senza il loop)
+## Test singoli
 
 ```bash
 # valida config, compose, nomi container, Glances — non tocca nulla
-docker compose run --rm emergency-stop --validate
+docker run --rm \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  -e DRY_RUN=true \
+  filippogrande/downscaler:latest --validate
 
 # prova senza Docker (file e nomi, niente socket)
-docker compose run --rm emergency-stop --validate --selftest
+docker run --rm \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  filippogrande/downscaler:latest --validate --selftest
 
 # esegue la logica e stampa cosa farebbe
-docker compose run --rm emergency-stop --dry-run
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock:rw \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  filippogrande/downscaler:latest --dry-run
 ```
 
 ## Comandi
@@ -74,8 +86,8 @@ docker compose exec emergency-stop cat /app/state/state.json
 # ricomincia (dopo un cambio a DRY_RUN)
 docker compose restart emergency-stop
 
-# aggiorna dopo una modifica al repo
-docker compose up -d --build
+# aggiorna l'immagine dopo un nuovo merge su main
+docker compose pull && docker compose up -d
 ```
 
 ## Configurazione
