@@ -1,0 +1,10 @@
+name: jellyfin
+compose_dir: /mnt/applicazioni/yml/docker/jellyfin
+compose_file: docker-compose.yml
+service_name:
+  - jellyfin
+can_stop: true
+can_restart: true
+one_shot: false
+priority: 190
+note: "ultimo della lista: il piu' importante"
