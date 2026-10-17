@@ -7,78 +7,94 @@ poi li riaccende gradualmente dopo 5 min di calma.
 ## Installazione
 
 ```bash
-# 0. Clona il repo (solo codice; stesso posto degli altri servizi)
-git clone https://github.com/filippogrande/downscaler.git /mnt/applicazioni/emergency-stop
+# 1. Crea la cartella di deploy
+mkdir -p /mnt/applicazioni/yml/docker/emergency-stop/services
+cd /mnt/applicazioni/yml/docker/emergency-stop
 
-# 1. Dipendenze
-sudo apt install -y python3-pip
-pip3 install pyyaml requests
+# 2. Copia i file dal repo
+cp /mnt/applicazioni/emergency-stop-repo/docker-compose.yml .
+cp /mnt/applicazioni/emergency-stop-repo/config.yaml .
+cp -r /mnt/applicazioni/emergency-stop-repo/examples/services/* services/
 
-# 2. Configura (FUORI dal repo: un git pull non la sovrascrive)
-sudo mkdir -p /etc/emergency-stop/services
-sudo cp /mnt/applicazioni/emergency-stop/config.yaml /etc/emergency-stop/
-sudo cp /mnt/applicazioni/emergency-stop/examples/services/*.yaml /etc/emergency-stop/services/
-
-# 3. Valida la configurazione (dir, compose, nomi container, Glances)
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
-
-# 4. Prova senza fare nulla: mostra cosa farebbe
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
-
-# 5. Copia i file systemd e avvia
-sudo cp /mnt/applicazioni/emergency-stop/emergency-stop.service /etc/systemd/system/
-sudo cp /mnt/applicazioni/emergency-stop/emergency-stop.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now emergency-stop.timer
+# 3. Prima avvio: DRY_RUN=true, non spegne nulla
+docker compose up -d
+docker logs -f emergency-stop
 ```
 
-**Ordine obbligato: `--validate`, poi `--dry-run`, poi il timer.**
-Mai abilitare il timer prima di aver visto un `--dry-run` pulito.
+**Nessun build locale**: l'immagine la builda GitHub Actions a ogni merge su `main`
+(workflow *Docker Build & Push*) e il compose fa solo **pull** da Docker Hub.
 
-### Se manca pip3
+## La cartella di deploy
+
+`/mnt/applicazioni/yml/docker/emergency-stop/`:
+
+| File | Contenuto |
+|---|---|
+| `docker-compose.yml` | valori letterali, niente `${}`, nessun `build:` |
+| `config.yaml` | soglie, Glances, Telegram |
+| `services/<nome>.yaml` | un file per servizio |
+
+## Il primo avvio è sicuro
+
+`docker-compose.yml` ha `DRY_RUN: "true"` **scritto letteralmente**: il container gira,
+legge la metrica, stampa cosa farebbe e **non spegne niente**.
+
+Per farlo lavorare davvero:
 
 ```bash
-sudo apt install -y python3-pip
+# modifica DRY_RUN: "false" nel compose, poi
+docker compose up -d
 ```
 
-Il repo NON va in `/opt` (di root, non scrivibile senza sudo): sta in
-`/mnt/applicazioni/emergency-stop`, come tutti gli altri servizi.
+`config.yaml` e `services/` sono riletti a ogni giro (60s): modificarli **non**
+richiede restart. Solo `DRY_RUN` è una env var, quindi per cambiarlo serve
+`docker compose up -d`.
 
-## Le due modalita' di verifica
+## Test singoli
 
 ```bash
-# Controlla config, compose, nomi container, Glances. Non tocca nulla.
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
+# valida config, compose, nomi container, Glances — non tocca nulla
+docker run --rm \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  -e DRY_RUN=true \
+  filippogrande/downscaler:latest --validate
 
-# Esegue la logica completa MA senza toccare Docker ne lo stato:
-# stampa '[dry-run] STOP: <servizio>' invece di fermarlo.
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
+# prova senza Docker (file e nomi, niente socket)
+docker run --rm \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  filippogrande/downscaler:latest --validate --selftest
+
+# esegue la logica e stampa cosa farebbe
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock:rw \
+  -v "$PWD/config.yaml:/app/config.yaml:ro" \
+  -v "$PWD/services:/app/services:ro" \
+  filippogrande/downscaler:latest --dry-run
 ```
 
-`--dry-run` legge lo stato esistente (quindi vede i servizi gia' fermati) ma **non lo
-riscrive**: il file di stato resta pulito e il timer puo' essere abilitato dopo.
+## Comandi
 
-Esempio di output:
+```bash
+# log
+docker logs -f emergency-stop
 
-```
-=== DRY-RUN: nessuna azione reale verra' eseguita ===
-Check: iowait=2.1 media=1.8 (stop>80.0, restart<60.0)
-Health check: radarr è down, lo riavvio
-[dry-run] START: radarr → docker compose -f /mnt/applicazioni/yml/docker/radarr/docker-compose.yml up -d
+# stato
+docker compose exec emergency-stop cat /app/state/state.json
+
+# ricomincia (dopo un cambio a DRY_RUN)
+docker compose restart emergency-stop
+
+# aggiorna l'immagine dopo un nuovo merge su main
+docker compose pull && docker compose up -d
 ```
 
 ## Configurazione
 
-Due livelli, apposta separati:
-
-| File | Cosa contiene | Dove |
-|---|---|---|
-| `config.yaml` | soglie, Glances, Telegram, recovery | `/etc/emergency-stop/config.yaml` |
-| `services/<nome>.yaml` | un file per servizio | `/etc/emergency-stop/services/` |
-
 ### config.yaml
 
-- `glances.url`: URL della tua istanza Glances
+- `glances.url`: URL dell'istanza Glances
 - `monitor.metric`: `iowait` o `load`
 - `monitor.sample_interval_sec`: ogni quanto campionare (30s)
 - `monitor.window_sec`: finestra media mobile (120s = 2 min)
@@ -90,7 +106,7 @@ Due livelli, apposta separati:
 
 ### File di servizio
 
-Un file per servizio, `/etc/emergency-stop/services/<nome>.yaml`:
+Un file per servizio in `services/<nome>.yaml`:
 
 ```yaml
 name: radarr
@@ -107,17 +123,22 @@ note: "il DB e' nel compose condiviso postgres-arr, deve restare su"
 
 | Campo | Significato | Default |
 |---|---|---|
-| `name` | nome del servizio (usato in stato e notifiche). Deve corrispondere al **nome esatto** del container | obbligatorio |
+| `name` | nome del servizio. Deve corrispondere al **nome esatto** del container | obbligatorio |
 | `compose_dir` | directory del compose | obbligatorio |
 | `compose_file` | nome del compose | `docker-compose.yml` |
-| `service_name` | container da considerare (uno o più) | `app` |
+| `service_name` | container da considerare (uno o più) | `name` |
 | `can_stop` | il downscaler può fermarlo | `true` |
 | `can_restart` | il downscaler può riaccenderlo | `true` |
 | `one_shot` | batch da cron, nessun container residente | `false` |
-| `priority` | ordine di stop (più basso = prima) | `100` |
+| `priority` | ordine di stop (più basso = fermato prima) | `100` |
 | `note` | libera, documenta la scelta | vuota |
 
-**Perché `can_stop` e `can_restart` sono separati:**
+**`priority` decide l'ordine di stop, non l'importanza.** Più basso = fermato per
+primo. Il ripristino avviene in ordine inverso (l'ultimo spento torna su per ultimo).
+
+**`can_stop: false` esclude un servizio**, qualunque priority abbia.
+
+**`can_stop` e `can_restart` sono separati:**
 
 - `can_stop: false` → non lo tira giù, ma il health-check può riaccenderlo
 - `can_restart: false` → può tirarlo giù, ma il health-check non lo riaccende
@@ -128,38 +149,14 @@ e non verrebbe mai più riacceso.
 **`one_shot`** è per i servizi da cron (`recyclarr`, `cleanuparr`): non hanno un
 container residente, quindi il health-check non deve riavviarli ogni 60s.
 
-**Suwayomi** è un unico servizio (`suwayomi`): sfw, nsfw e gluetun condividono
-lo stesso compose e vanno giù insieme.
+**Suwayomi** è un unico servizio: sfw, nsfw e gluetun condividono lo stesso compose
+e vanno giù insieme.
 
-## Comandi utili
+## Rischio
 
-```bash
-# Valida config, compose e nomi container
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --validate
-
-# Mostra cosa farebbe, senza eseguire nulla
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py --dry-run
-
-# Vedi i log
-journalctl -u emergency-stop.service -f
-
-# Vedi lo stato
-cat /var/lib/emergency-stop/state.json
-
-# Riavvia il timer
-sudo systemctl restart emergency-stop.timer
-
-# Prova manualmente (esegue davvero)
-python3 /mnt/applicazioni/emergency-stop/emergency-stop.py
-```
-
-## Stato
-
-`/var/lib/emergency-stop/state.json` — **non** in `/tmp`, che si svuota al reboot.
-Se lo stato sparisce si perdono `recovery_started_at` e `incident_start`, quindi
-la durata dell'incidente e il primo riavvio dopo un riavvio del server.
-
-In `--dry-run` lo stato **non viene scritto**.
+Il container monta `/var/run/docker.sock:rw` per eseguire `docker compose ...`.
+`docker.sock:rw` = accesso equivalente a root al daemon. Necessario per spegnere gli
+altri servizi, va dichiarato come tale.
 
 ## Metriche Glances
 
@@ -170,7 +167,6 @@ più le metriche.
 - `iowait` → `GET /api/4/cpu`, campo `iowait`
 - `load` → `GET /api/4/load`, campo `min1`
 
-Il programma prova prima `/api/4/` e poi `/api/3/` (per Glances più vecchi).
 Se la metrica non è leggibile il giro viene **saltato** e l'errore va in log:
 non viene più usato `0.0` (= tutto ok).
 
@@ -183,7 +179,7 @@ non viene più usato `0.0` (= tutto ok).
 5. **Recovery**: 5 min di calma **con media < restart_threshold** → riavvia un servizio → altri 5 min → il successivo.
 
 **Avviso**: chi spegne un servizio a mano lo vede riacceso dal health-check entro 60s.
-Prima di lavorare su un servizio: `systemctl stop emergency-stop.timer`.
+Per lavorare su un servizio: `docker compose stop emergency-stop`.
 
 ## Servizi mai fermati
 

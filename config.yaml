@@ -1,8 +1,8 @@
-# Emergency Stop — configurazione (copia in /etc/emergency-stop/config.yaml)
+# Emergency Stop — configurazione
 #
-# Qui stanno SOLO le soglie e i collegamenti esterni.
-# L'elenco dei servizi e' in /etc/emergency-stop/services/<nome>.yaml
-# (un file per servizio: aggiungerne uno non tocca questo file).
+# File montato nel container a /app/config.yaml (vedi docker-compose.yml).
+# Soglie, metrica e recovery stanno QUI. I servizi stanno in services/<nome>.yaml.
+# L'intervallo del loop e' check_interval_sec sotto: un'unica fonte, non duplicata.
 
 glances:
   url: "http://10.0.0.5:61208"
@@ -13,14 +13,13 @@ monitor:
   window_sec: 120               # finestra media mobile: 2 min
   stop_threshold: 80.0          # media > 80% → ferma un servizio
   restart_threshold: 60.0       # media < 60% → puo' riavviare
-  check_interval_sec: 60        # esegui il loop ogni 60s
+  check_interval_sec: 60        # loop ogni 60s (letto da entrypoint.sh)
 
 recovery:
   calm_duration_sec: 300        # 5 min di calma prima del primo riavvio
   restart_delay_sec: 300        # 5 min tra un riavvio e l'altro
-  restart_check_sec: 30         # controlla ogni 30s se la calma e' mantenuta
 
 telegram:
-  enabled: true
+  enabled: false                # true = notifiche attive
   bot_token: "INSERISCI_BOT_TOKEN"
   chat_id: "INSERISCI_CHAT_ID"
