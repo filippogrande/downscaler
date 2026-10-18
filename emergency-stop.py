@@ -40,6 +40,7 @@ le metriche lette da Glances (utili per test senza carico reale).
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -50,10 +51,9 @@ import yaml
 if TYPE_CHECKING:
     from pathlib import Path
 
-# I test patchano MODULE.subprocess.run (oggetto stdlib condiviso): il nome
-# deve esistere in questo modulo anche se il codice non lo usa piu'.
-import subprocess  # noqa: F401
-
+# I test patchano MODULE.subprocess.run e MODULE.time.sleep (oggetti stdlib
+# condivisi): i nomi devono esistere in questo modulo anche se il codice non
+# li usa piu'.
 from downscaler import config as config_mod
 from downscaler import docker_ops, monitoring, services
 from downscaler.config import CONFIG_PATH, SERVICES_DIR, STATE_PATH, _merge_defaults, _normalize_state
