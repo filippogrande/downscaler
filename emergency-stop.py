@@ -95,8 +95,12 @@ running_containers = docker_ops.running_containers
 # DRY_RUN e' un alias VIVO di config_mod.DRY_RUN: i flag --dry-run/--no-dry-run
 # scrivono config_mod.DRY_RUN e i test scrivono module.DRY_RUN. Un semplice
 # `from downscaler.config import DRY_RUN` congelerebbe il valore all'import,
-# quindi le due scritture non si vedrebbero piu'. La property definita sul
-# __class__ del modulo risolve lettura e scrittura sul nome di config_mod.
+# quindi le due scritture non si vedrebbero piu'.
+# La property deve vivere sul TIPO del modulo. `__class__ = X` come nome
+# globale non basta: __class__ e' un descrittore dati (ha la precedenza sul
+# __dict__ del modulo), quindi l'assegnazione finirebbe in __dict__ e il tipo
+# dell'oggetto resterebbe ModuleType. Serve assegnare l'attributo sull'oggetto
+# modulo, che durante l'esecuzione del modulo e' sempre in sys.modules.
 # N802: il nome della property DEVE restare DRY_RUN (e' l'alias del nome di
 # config_mod), quindi il metodo non si puo' rinominare in minuscolo.
 class _EmergencyModule(types.ModuleType):
@@ -109,7 +113,7 @@ class _EmergencyModule(types.ModuleType):
         config_mod.DRY_RUN = value
 
 
-__class__ = _EmergencyModule
+sys.modules[__name__].__class__ = _EmergencyModule
 
 
 def _parse_args() -> argparse.Namespace:
