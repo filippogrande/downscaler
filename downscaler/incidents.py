@@ -34,6 +34,11 @@ def collect_incident_snapshot(
     incidents_config = config.get("incidents", {})
     if not incidents_config.get("enabled", True):
         return None
+    if config_mod.DRY_RUN:
+        # In dry-run non si scrive nulla: la cartella degli incidenti e' sul
+        # disco dell'host e un giro simulato non deve crearla.
+        log.info("[dry-run] snapshot incidente non scritto")
+        return None
 
     log_dir = Path(incidents_config.get("dir", "/app/incidents"))
     log_tail = incidents_config.get("log_tail", 20000)

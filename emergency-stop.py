@@ -66,7 +66,7 @@ from downscaler.config import CONFIG_PATH, SERVICES_DIR, STATE_PATH, _merge_defa
 # I test leggono module.DEFAULTS: il nome deve esistere in questo modulo.
 from downscaler.config import DEFAULTS  # noqa: F401
 from downscaler.docker_ops import is_service_running as _docker_is_service_running
-from downscaler.docker_ops import start_service, stop_service
+from downscaler.docker_ops import start_service, stop_service as _docker_stop_service
 # I test chiamano module._which: il nome deve esistere in questo modulo.
 from downscaler.docker_ops import _which  # noqa: F401
 from downscaler.incidents import (
@@ -84,7 +84,7 @@ from downscaler.monitoring import (
 from downscaler.monitoring import update_window  # noqa: F401
 # I test patchano module._glances_get: il nome deve esistere in questo modulo.
 from downscaler.monitoring import _glances_get  # noqa: F401
-from downscaler.services import check_service_files
+from downscaler.services import check_service_files as _services_check_service_files
 from downscaler.state import load_state as _load_state
 from downscaler.state import save_state as _save_state, send_telegram
 
@@ -145,12 +145,17 @@ def save_state(state: dict) -> None:
 
 def health_check(services_list: list[dict], state: dict) -> None:
     """Riavvia i servizi down non spenti dal sistema (wrapper iniettato)."""
-    _monitoring_health_check(services_list, state, running_check=running_containers)
+    _monitoring_health_check(services_list, state, running_check=running_containers, start_fn=start_service)
 
 
 def is_service_running(service: dict) -> bool:
     """True se almeno un container del servizio e' in esecuzione."""
     return _docker_is_service_running(service, running_check=running_containers)
+
+
+def stop_service(service: dict) -> bool:
+    """Ferma un servizio (wrapper iniettato: is_running di questo modulo)."""
+    return _docker_stop_service(service, is_running=is_service_running)
 
 
 def collect_incident_snapshot(
@@ -163,6 +168,25 @@ def collect_incident_snapshot(
 def send_incident_report(snapshot_dir: Path, state: dict, config: dict) -> None:
     """Report finale dell'incidente: inietta send_telegram di questo modulo."""
     _send_incident_report(snapshot_dir, state, config, notify_fn=send_telegram)
+
+
+def check_service_files(services_list: list[dict], config: dict) -> bool:
+    """Valida i file di servizio (wrapper iniettato: running_check e metrics_fn).
+
+    Il flag `selftest` vive su questa funzione (lo alza main con --selftest e
+    i test per simulare la modalita' senza Docker): lo ritrasmette.
+    """
+    return _services_check_service_files(
+        services_list,
+        config,
+        running_check=running_containers,
+        metrics_fn=get_glances_metrics,
+        selftest=check_service_files.selftest,
+    )
+
+
+# Default del flag --selftest: main lo alza per la modalita' senza Docker.
+check_service_files.selftest = False
 
 
 def _build_actions() -> Actions:
