@@ -74,6 +74,10 @@ DEFAULTS = {
         "restart_threshold": 60.0,
         "load_stop_threshold": 6.0,
         "load_restart_threshold": 4.0,
+        # Soglie critiche del super-stop: oltre questi valori il downscale
+        # ferma DUE servizi invece di uno.
+        "load_super_threshold": 11.0,
+        "iowait_super_threshold": 95.0,
         "check_interval_sec": 60,
     },
     "recovery": {
@@ -97,7 +101,7 @@ DEFAULTS = {
     },
 }
 
-# Chiavi dello stato con il loro valore iniziale: uno stato parzialo
+# Chiavi dello stato con il loro valore iniziale: uno stato parziale
 # (es. scritto in dry-run prima di questa regola) viene completato.
 STATE_DEFAULTS = {
     "mode": "monitor",
@@ -146,7 +150,7 @@ def _merge_defaults(config: dict) -> dict:
 
 
 def _normalize_state(state: dict) -> dict:
-    """Completa uno stato parzialo con le chiavi mancanti (STATE_DEFAULTS)."""
+    """Completa uno stato parziale con le chiavi mancanti (STATE_DEFAULTS)."""
     normalized = dict(STATE_DEFAULTS)
     normalized.update(state)
     return normalized
@@ -634,11 +638,11 @@ def send_incident_report(snapshot_dir: Path, state: dict, config: dict):
     incident_start = datetime.fromisoformat(state["incident_start"])
     incident_end = datetime.now()
     duration_min = (incident_end - incident_start).total_seconds() / 60
-    num_services = len(state.get("incident_services", []))
+    fermati = state.get("incident_services", [])
 
     message = (
         f"✅ Incidente risolto — {duration_min:.0f} minuti\n"
-        f"Servizi fermati: {num_services}\n"
+        f"Servizi fermati ({len(fermati)}): {', '.join(fermati)}\n"
         f"Log: {snapshot_dir}"
     )
     send_telegram(message, config)
@@ -731,6 +735,22 @@ def main():
     if state["mode"] == "recovery":
         elapsed = (now - datetime.fromisoformat(state["recovery_started_at"])).total_seconds()
         if elapsed >= recovery_wait:
+            # Se le metriche sono risalite sopra la soglia di stop il recovery
+            # non deve insistere: si torna in monitor mode, che si occupera' di
+            # spegnere altri servizi. Senza questo controllo il sistema restava
+            # bloccato a riavviare senza mai tornare a stoppare.
+            iowait_above_stop = avg_iowait is not None and avg_iowait >= stop_threshold
+            load_above_stop = avg_load is not None and avg_load >= load_stop_threshold
+            if iowait_above_stop or load_above_stop:
+                log.warning(
+                    f"Recovery: metriche risalite sopra soglia stop "
+                    f"(iowait_media={fmt_metric(avg_iowait)}, load_media={fmt_metric(avg_load)}), "
+                    "torno in monitor mode"
+                )
+                state["mode"] = "monitor"
+                state["recovery_started_at"] = None
+                save_state(state)
+                return
             # Recovery: serve che ENTRAMBE le metriche siano sotto soglia
             iowait_ok = (avg_iowait is None or avg_iowait < restart_threshold)
             load_ok = (avg_load is None or avg_load < load_restart_threshold)
@@ -742,6 +762,13 @@ def main():
                 service = next((s for s in services if s["name"] == service_name), None)
                 if service is None:
                     log.error(f"Recovery: servizio {service_name} non piu' in config, lo scarto")
+                    state["stopped_services"].pop()
+                    save_state(state)
+                    return
+                # Un servizio con can_restart=false non deve essere riavviato
+                # dal recovery: lo scarto dai pendenti e basta.
+                if not service["can_restart"]:
+                    log.info(f"Recovery: {service_name} ha can_restart=false, lo salto")
                     state["stopped_services"].pop()
                     save_state(state)
                     return
@@ -810,57 +837,76 @@ def main():
             log.warning("Tutti i servizi candidati sono gia' spenti o falliti, niente da fare")
             return
 
-        service = candidates[0]
-        log.info(f"Tentativo stop: {service['name']}")
+        # Super-stop: con metriche oltre la soglia critica se ne fermano due,
+        # per abbassare il carico prima del prossimo giro.
+        iowait_super = avg_iowait is not None and avg_iowait >= monitor["iowait_super_threshold"]
+        load_super = avg_load is not None and avg_load >= monitor["load_super_threshold"]
+        stop_count = 2 if (iowait_super or load_super) else 1
+        targets = candidates[:stop_count]
 
-        if stop_service(service):
+        if stop_count > 1:
+            log.warning(
+                f"SUPER-STOP: iowait_media={fmt_metric(avg_iowait)} "
+                f"(soglia {monitor['iowait_super_threshold']}), "
+                f"load_media={fmt_metric(avg_load)} "
+                f"(soglia {monitor['load_super_threshold']}), "
+                f"fermo {len(targets)} servizi"
+            )
+        log.info(f"Tentativo stop: {', '.join(t['name'] for t in targets)}")
+
+        stopped_any = False
+        for service in targets:
+            if not stop_service(service):
+                # Il down fallisce: segna il servizio come fallito e al giro
+                # dopo prova il successivo, invece di bloccare l'intera lista.
+                log.error(f"Stop {service['name']} fallito, il prossimo giro provaro' il successivo")
+                state.setdefault("failed_stops", []).append(service["name"])
+                state["failed_stops"] = state["failed_stops"][-20:]
+                save_state(state)
+                continue
             state["stopped_services"].append(service["name"])
             state["incident_services"].append(service["name"])
             state["last_alarm_time"] = now.isoformat()
             state["failed_stops"] = [n for n in state.get("failed_stops", []) if n != service["name"]]
             save_state(state)
-
             send_telegram(f"- {service['name']}", config)
+            stopped_any = True
 
-            new_avg_iowait = None
-            new_avg_load = None
-            if DRY_RUN:
-                # Senza un down reale non c'e' nulla da misurare: si usano le
-                # medie correnti invece di riempire la finestra con un campione
-                # inventato (e di crashare se il down fosse fallito).
-                log.info("[dry-run] nessun campionamento post-stop")
-                new_avg_iowait = avg_iowait
-                new_avg_load = avg_load
-            else:
-                time.sleep(30)
-                new_iowait, new_load = get_glances_metrics(config, args.simulate_iowait, args.simulate_load)
-                if new_iowait is None and new_load is None:
-                    log.error("Post-stop: metriche non leggibili, valuto al prossimo giro")
-                    return
-                new_avg_iowait = update_window(window_iowait, new_iowait, window_sec, sample_interval) if new_iowait is not None else None
-                new_avg_load = update_window(window_load, new_load, window_sec, sample_interval) if new_load is not None else None
-                state["metric_window"] = list(window_iowait)
-                state["metric_window_load"] = list(window_load)
-                save_state(state)
-                log.info(f"Post-stop {service['name']}: iowait_media={fmt_metric(new_avg_iowait)}, load_media={fmt_metric(new_avg_load)}")
+        if not stopped_any:
+            return
 
-            # Recovery se ENTRAMBE sotto soglia
-            iowait_ok = (new_avg_iowait is None or new_avg_iowait < stop_threshold)
-            load_ok = (new_avg_load is None or new_avg_load < load_stop_threshold)
-            if iowait_ok and load_ok:
-                log.info("Migliorato! Entro in recovery mode")
-                state["mode"] = "recovery"
-                state["recovery_started_at"] = now.isoformat()
-                save_state(state)
-            else:
-                log.warning("Non migliora, prossimo giro provaro' un altro servizio")
+        new_avg_iowait = None
+        new_avg_load = None
+        if DRY_RUN:
+            # Senza un down reale non c'e' nulla da misurare: si usano le
+            # medie correnti invece di riempire la finestra con un campione
+            # inventato (e di crashare se il down fosse fallito).
+            log.info("[dry-run] nessun campionamento post-stop")
+            new_avg_iowait = avg_iowait
+            new_avg_load = avg_load
         else:
-            # Il down fallisce: segna il servizio come fallito e al giro dopo
-            # prova il successivo, invece di bloccare l'intera lista.
-            log.error(f"Stop {service['name']} fallito, il prossimo giro provaro' il successivo")
-            state.setdefault("failed_stops", []).append(service["name"])
-            state["failed_stops"] = state["failed_stops"][-20:]
+            time.sleep(30)
+            new_iowait, new_load = get_glances_metrics(config, args.simulate_iowait, args.simulate_load)
+            if new_iowait is None and new_load is None:
+                log.error("Post-stop: metriche non leggibili, valuto al prossimo giro")
+                return
+            new_avg_iowait = update_window(window_iowait, new_iowait, window_sec, sample_interval) if new_iowait is not None else None
+            new_avg_load = update_window(window_load, new_load, window_sec, sample_interval) if new_load is not None else None
+            state["metric_window"] = list(window_iowait)
+            state["metric_window_load"] = list(window_load)
             save_state(state)
+            log.info(f"Post-stop {targets[-1]['name']}: iowait_media={fmt_metric(new_avg_iowait)}, load_media={fmt_metric(new_avg_load)}")
+
+        # Recovery se ENTRAMBE sotto soglia
+        iowait_ok = (new_avg_iowait is None or new_avg_iowait < stop_threshold)
+        load_ok = (new_avg_load is None or new_avg_load < load_stop_threshold)
+        if iowait_ok and load_ok:
+            log.info("Migliorato! Entro in recovery mode")
+            state["mode"] = "recovery"
+            state["recovery_started_at"] = now.isoformat()
+            save_state(state)
+        else:
+            log.warning("Non migliora, prossimo giro provaro' un altro servizio")
     elif state["stopped_services"]:
         # Se c'erano servizi fermati ma le metriche sono scese, entra in recovery
         log.info("Metriche tornate sotto soglia, entro in recovery mode")
