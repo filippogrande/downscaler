@@ -38,13 +38,25 @@ jobs:
       - name: Test
         run: |
           set -o pipefail
-          echo "::error file=.github/workflows/ci.yml::DIAG-ANNOTATION-TEST"
-          pytest --tb=line -q 2>&1 | tee /tmp/pytest.log
-          status=$?
-          grep -E "^(FAILED|ERROR)" /tmp/pytest.log | while IFS= read -r line; do
-            echo "::error file=.github/workflows/ci.yml::${line//:://}"
-          done
-          exit $status
+          pytest --tb=short -q 2>&1 | tee pytest-ci.log
+          exit $?
+
+      # DIAGNOSTICA TEMPORANEA: pubblica i test falliti in un commento della PR.
+      - name: Diagnostica test falliti
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('pytest-ci.log', 'utf8');
+            const righe = log.split('\n').filter((l) => /^(FAILED|ERROR)/.test(l));
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ['DIAG pytest', '```', ...righe, '```'].join('\n'),
+            });
 
       - name: Docker build
         run: docker build -t downscaler .
