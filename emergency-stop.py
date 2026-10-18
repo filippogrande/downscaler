@@ -69,8 +69,10 @@ from downscaler.monitoring import (
     fmt_metric,
     get_glances_metrics,
     health_check as _monitoring_health_check,
-    update_window,
 )
+# I test chiamano module.update_window: il nome deve esistere nel namespace di
+# questo modulo anche se il codice non lo usa.
+from downscaler.monitoring import update_window  # noqa: F401
 from downscaler.services import check_service_files
 from downscaler.state import load_state as _load_state
 from downscaler.state import save_state as _save_state, send_telegram
