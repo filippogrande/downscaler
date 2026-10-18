@@ -36,13 +36,7 @@ jobs:
         run: bandit -r emergency-stop.py -ll
 
       - name: Test
-        run: |
-          set +e
-          pytest --tb=short -q > /tmp/pytest.log 2>&1
-          code=$?
-          msg=$(tail -c 2000 /tmp/pytest.log | sed 's/%/%25/g' | tr '\n' '%0A')
-          echo "::error file=tests/test_main.py,line=1::DIAG ${msg}"
-          exit $code
+        run: pytest --tb=short -q
 
       - name: Docker build
         run: docker build -t downscaler .
