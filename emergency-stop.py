@@ -41,18 +41,21 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # I test patchano MODULE.subprocess.run (oggetto stdlib condiviso): il nome
 # deve esistere in questo modulo anche se il codice non lo usa piu'.
 import subprocess  # noqa: F401
 
 from downscaler import config as config_mod
-from downscaler import docker_ops, incidents, monitoring, services
-from downscaler import state as state_mod
+from downscaler import docker_ops, monitoring, services
 from downscaler.config import CONFIG_PATH, SERVICES_DIR, STATE_PATH, _merge_defaults, _normalize_state
 from downscaler.docker_ops import is_service_running as _docker_is_service_running
 from downscaler.docker_ops import start_service, stop_service
@@ -65,7 +68,7 @@ from downscaler.monitoring import (
     fmt_metric,
     get_glances_metrics,
     health_check as _monitoring_health_check,
-    update_window as update_window,
+    update_window,
 )
 from downscaler.services import check_service_files
 from downscaler.state import load_state as _load_state
