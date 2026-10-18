@@ -107,9 +107,10 @@ def send_incident_report(
     if not incidents_config.get("telegram_report", True):
         return
     duration_min = (datetime.now() - datetime.fromisoformat(state["incident_start"])).total_seconds() / 60
+    fermati = ", ".join(state.get("incident_services", []))
     message = (
         f"✅ Incidente risolto — {duration_min:.0f} minuti\n"
-        f"Servizi fermati: {len(state.get('incident_services', []))}\n"
+        f"Servizi fermati: {len(state.get('incident_services', []))} ({fermati})\n"
         f"Log: {snapshot_dir}"
     )
     notify(message, config)
