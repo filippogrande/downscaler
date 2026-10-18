@@ -42,15 +42,15 @@ def _isolamento_modulo(module, monkeypatch):
 def servizio():
     """Costruisce un servizio gestibile (dict) con valori sensati."""
 
-    def _make(nome, priority=60, can_restart=True, can_stop=True, one_shot=False):
+    def _make(nome, priority=60, can_restart=None, can_stop=None, one_shot=None):
         return {
             "name": nome,
             "compose_dir": Path("/x"),
             "compose_file": "docker-compose.yml",
             "service_names": [f"{nome}-app-1"],
-            "can_stop": can_stop,
-            "can_restart": can_restart,
-            "one_shot": one_shot,
+            "can_stop": True if can_stop is None else can_stop,
+            "can_restart": True if can_restart is None else can_restart,
+            "one_shot": False if one_shot is None else one_shot,
             "priority": priority,
             "note": "",
         }
