@@ -38,7 +38,7 @@ def _glances_get(base_url: str, path: str) -> dict | None:
     """GET /api/<ver>/<path> su Glances. Ritorna il dict, o None se non raggiungibile."""
     url = f"{base_url.rstrip('/')}{path}"
     try:
-n        resp = requests.get(url, timeout=5)
+        resp = requests.get(url, timeout=5)
         resp.raise_for_status()
         return resp.json()
     except requests.HTTPError as e:
