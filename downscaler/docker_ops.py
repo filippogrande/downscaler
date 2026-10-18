@@ -69,8 +69,13 @@ def _compose_cmd(service: dict) -> list[str]:
     return ["docker", "compose", "-f", str(service["compose_dir"] / service["compose_file"])]
 
 
-def stop_service(service: dict) -> bool:
-    """Ferma un servizio con docker compose down (mai in --dry-run)."""
+def stop_service(service: dict, is_running: Callable[[dict], bool] | None = None) -> bool:
+    """Ferma un servizio con docker compose down (mai in --dry-run).
+
+    `is_running` e' iniettato: i test patchano il nome a livello di modulo
+    di emergency-stop, non questa funzione.
+    """
+    check = is_running or is_service_running
     cmd = _compose_cmd(service) + ["down"]
     if config_mod.DRY_RUN:
         log.info(f"[dry-run] STOP: {service['name']} -> {' '.join(cmd)}")
@@ -81,7 +86,7 @@ def stop_service(service: dict) -> bool:
         log.error(f"Errore stop {service['name']}: {result.stderr}")
         return False
     time.sleep(5)
-    if is_service_running(service):
+    if check(service):
         log.error(f"{service['name']} ancora attivo dopo down!")
         return False
     log.info(f"OK {service['name']} spento correttamente")

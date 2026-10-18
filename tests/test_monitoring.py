@@ -90,11 +90,12 @@ def test_get_glances_metrics_errore_rete_ritorna_none(module, monkeypatch):
 def test_health_check_riavvia_solo_chi_puo_ripartire(module, monkeypatch):
     chiamate = []
     monkeypatch.setattr(module, "start_service", lambda s: chiamate.append(s["name"]) or True)
-    monkeypatch.setattr(module, "is_service_running", lambda s: False)
+    # running_containers e' il nome iniettato come running_check dal wrapper.
+    monkeypatch.setattr(module, "running_containers", lambda names: [])
     servizi = [
-        {"name": "a", "one_shot": False, "can_restart": True},
-        {"name": "b", "one_shot": False, "can_restart": False},
-        {"name": "c", "one_shot": True, "can_restart": True},
+        {"name": "a", "one_shot": False, "can_restart": True, "service_names": ["a-app-1"]},
+        {"name": "b", "one_shot": False, "can_restart": False, "service_names": ["b-app-1"]},
+        {"name": "c", "one_shot": True, "can_restart": True, "service_names": ["c-app-1"]},
     ]
 
     module.health_check(servizi, {"stopped_services": []})
@@ -105,8 +106,8 @@ def test_health_check_riavvia_solo_chi_puo_ripartire(module, monkeypatch):
 def test_health_check_salta_servizi_fermi_dal_sistema(module, monkeypatch):
     chiamate = []
     monkeypatch.setattr(module, "start_service", lambda s: chiamate.append(s["name"]) or True)
-    monkeypatch.setattr(module, "is_service_running", lambda s: False)
-    servizi = [{"name": "a", "one_shot": False, "can_restart": True}]
+    monkeypatch.setattr(module, "running_containers", lambda names: [])
+    servizi = [{"name": "a", "one_shot": False, "can_restart": True, "service_names": ["a-app-1"]}]
 
     module.health_check(servizi, {"stopped_services": ["a"]})
 
@@ -116,8 +117,8 @@ def test_health_check_salta_servizi_fermi_dal_sistema(module, monkeypatch):
 def test_health_check_non_riavvia_servizi_gia_attivi(module, monkeypatch):
     chiamate = []
     monkeypatch.setattr(module, "start_service", lambda s: chiamate.append(s["name"]) or True)
-    monkeypatch.setattr(module, "is_service_running", lambda s: True)
-    servizi = [{"name": "a", "one_shot": False, "can_restart": True}]
+    monkeypatch.setattr(module, "running_containers", lambda names: ["a-app-1"])
+    servizi = [{"name": "a", "one_shot": False, "can_restart": True, "service_names": ["a-app-1"]}]
 
     module.health_check(servizi, {"stopped_services": []})
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -80,17 +81,27 @@ def restartable_services(services: list[dict], state: dict) -> list[dict]:
     ]
 
 
-def check_service_files(services: list[dict], config: dict) -> bool:
+def check_service_files(
+    services: list[dict],
+    config: dict,
+    running_check: Callable[[list[str]], list[str]] | None = None,
+    metrics_fn: Callable[[dict], tuple[float | None, float | None]] | None = None,
+    selftest: bool = False,
+) -> bool:
     """Controlla i file di servizio. Ritorna True se tutto ok.
 
     Modalita' --selftest: solo file e nomi, niente Docker (utile dove non
     c'e' il socket Docker, o per controllare la config senza permessi).
+
+    `running_check`, `metrics_fn` e `selftest` sono iniettati: i test patchano
+    i nomi a livello di modulo di emergency-stop, non questa funzione.
     """
     # Import locali: monitoring importa questo modulo, quindi in testa si
     # creerebbe un ciclo (services -> monitoring -> services).
     from downscaler import docker_ops, monitoring
 
-    selftest = getattr(check_service_files, "selftest", False)
+    check = running_check or docker_ops.running_containers
+    read_metrics = metrics_fn or monitoring.get_glances_metrics
     if not services:
         print(f"NESSUN SERVIZIO in {SERVICES_DIR} (atteso: un file <nome>.yaml per servizio)")
         return False
@@ -98,10 +109,10 @@ def check_service_files(services: list[dict], config: dict) -> bool:
     print(f"\n=== Validazione {len(services)} servizi ===")
     ok = True
     for service in services:
-        ok = _check_one_service(service, selftest, docker_ops.running_containers) and ok
+        ok = _check_one_service(service, selftest, check) and ok
 
     print("\n=== Glances ===")
-    ok = ok and _check_glances(config, monitoring.get_glances_metrics)
+    ok = ok and _check_glances(config, read_metrics)
     print(f"\n=== Esito: {'OK' if ok else 'ERRORI'} ===")
     return ok
 
