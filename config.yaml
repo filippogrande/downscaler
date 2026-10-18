@@ -15,6 +15,8 @@ monitor:
   restart_threshold: 60.0        # iowait < 60% -> puo' riavviare
   load_stop_threshold: 6.0       # load > 6 (su 6 core) -> ferma un servizio
   load_restart_threshold: 4.0    # load < 4 -> puo' riavviare
+  load_super_threshold: 11.0     # load > 11 -> super-stop: ferma 2 servizi
+  iowait_super_threshold: 95.0   # iowait > 95% -> super-stop: ferma 2 servizi
   check_interval_sec: 60         # loop ogni 60s (letto da entrypoint.sh)
 
 recovery:
@@ -25,3 +27,10 @@ telegram:
   enabled: false                 # true = notifiche attive
   bot_token: "INSERISCI_BOT_TOKEN"
   chat_id: "INSERISCI_CHAT_ID"
+
+incidents:
+  enabled: true                 # raccogli log e metriche durante l'incidente
+  dir: "/mnt/applicazioni/yml/docker/emergency-stop/incidents"
+  telegram_report: true         # invia report Telegram alla fine dell'incidente
+  log_tail: 20000               # max righe di log per container
+  log_window_min: 15            # finestra log prima/dopo l'incidente (minuti)

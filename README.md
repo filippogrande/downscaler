@@ -24,7 +24,7 @@ docker logs -f emergency-stop
 **Nessun build locale**: l'immagine la builda GitHub Actions a ogni merge su `main`
 (workflow *Docker Build & Push*) e il compose fa solo **pull** da Docker Hub.
 
-## La cartella deplo
+## La cartella di deploy
 
 `/mnt/applicazioni/yml/docker/emergency-stop/`:
 
@@ -105,6 +105,10 @@ docker compose pull && docker compose up -d
 - `recovery.calm_duration_sec`: 5 min di calma prima del primo riavvio
 - `recovery.restart_delay_sec`: 5 min tra un riavvio e l'altro
 - `telegram`: bot_token e chat_id per notifiche
+- `incidents.dir`: cartella degli snapshot degli incidenti
+- `incidents.telegram_report`: invia report Telegram alla fine dell'incidente
+- `incidents.log_tail`: max righe di log per container (default 20000)
+- `incidents.log_window_min`: finestra log prima/dopo l'incidente (default 15)
 
 L'allarme scatta se **una** delle due metriche supera la sua soglia; il riavvio
 richiede che **entrambe** siano sotto soglia. Con le soglie di default, un load
@@ -187,6 +191,26 @@ non viene più usato `0.0` (= tutto ok).
 
 **Avviso**: chi spegne un servizio a mano lo vede riacceso dal health-check entro 60s.
 Per lavorare su un servizio: `docker compose stop emergency-stop`.
+
+## Incident snapshots
+
+A ogni incidente il downscaler raccoglie e salva i log di tutti i container
+attivi:
+
+```
+incidents/2026-10-17_22-30-15/
+  ├── radarr-radarr-1.log
+  ├── sonarr.log
+  ├── metrics.json      ← iowait/load all'inizio e fine
+  └── summary.txt       ← durata, servizi fermati, ordine
+```
+
+- **Finestra log**: `incident_start - log_window_min` → `incident_end + log_window_min` (default 15 min prima/dopo)
+- **Limite righe**: `incidents.log_tail` per container (default 20.000 — un servizio in loop di errori non può riempire il disco)
+- **Report Telegram**: alla fine dell'incidente, un messaggio con durata, servizi fermati e path della cartella
+
+L'analisi post-incidente: `metrics.json` per vedere l'andamento,
+`summary.txt` per il riepilogo, i `.log` per i dettagli.
 
 ## Servizi mai fermati
 

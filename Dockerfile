@@ -20,7 +20,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY emergency-stop.py entrypoint.sh ./
+# `downscaler/` e' il package con la logica: senza questo COPY l'entrypoint
+# non troverebbe i moduli e il container partirebbe in restart loop.
+COPY emergency-stop.py entrypoint.sh downscaler/ ./
 RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
