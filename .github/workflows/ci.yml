@@ -36,7 +36,15 @@ jobs:
         run: bandit -r emergency-stop.py -ll
 
       - name: Test
-        run: pytest --tb=short -q
+        run: |
+          set -o pipefail
+          echo "::error file=.github/workflows/ci.yml::DIAG-ANNOTATION-TEST"
+          pytest --tb=line -q 2>&1 | tee /tmp/pytest.log
+          status=$?
+          grep -E "^(FAILED|ERROR)" /tmp/pytest.log | while IFS= read -r line; do
+            echo "::error file=.github/workflows/ci.yml::${line//:://}"
+          done
+          exit $status
 
       - name: Docker build
         run: docker build -t downscaler .
