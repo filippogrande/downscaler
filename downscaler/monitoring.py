@@ -322,6 +322,8 @@ def _stop_candidates_services(
         log.warning("Tutti i servizi candidati sono gia' spenti o falliti, niente da fare")
         return
     targets = candidates[: _super_stop_count(avg_iowait, avg_load, config["monitor"])]
+    if len(targets) > 1:
+        log.warning(f"SUPER-STOP: fermo {len(targets)} servizi in un colpo ({', '.join(s['name'] for s in targets)})")
     results = [_stop_one(config, state, service, now, actions) for service in targets]
     if any(results):
         _evaluate_after_stop(config, state, avg_iowait, avg_load, now, actions)
