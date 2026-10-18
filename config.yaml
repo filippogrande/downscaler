@@ -15,9 +15,8 @@ monitor:
   restart_threshold: 60.0        # iowait < 60% -> puo' riavviare
   load_stop_threshold: 6.0       # load > 6 (su 6 core) -> ferma un servizio
   load_restart_threshold: 4.0    # load < 4 -> puo' riavviare
-  # Soglie critiche: oltre questi valori il downscale ferma DUE servizi.
-  load_super_threshold: 11.0     # load > 11 -> super-stop (2 servizi)
-  iowait_super_threshold: 95.0   # iowait > 95% -> super-stop (2 servizi)
+  load_super_threshold: 11.0     # load > 11 -> super-stop: ferma 2 servizi
+  iowait_super_threshold: 95.0   # iowait > 95% -> super-stop: ferma 2 servizi
   check_interval_sec: 60         # loop ogni 60s (letto da entrypoint.sh)
 
 recovery:
