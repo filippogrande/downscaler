@@ -87,6 +87,10 @@ def avvia_main(module, monkeypatch):
         if services is not None:
             monkeypatch.setattr(module, "load_services", lambda directory: services)
         monkeypatch.setattr(module, "running_containers", running or (lambda names: []))
+        # Senza questo patch il health check chiamerebbe davvero
+        # `docker compose up -d`: in CI parte un Docker reale, con attese
+        # lunghissime (o il passo che non finisce mai).
+        monkeypatch.setattr(module, "start_service", lambda service: True)
         monkeypatch.setattr(sys, "argv", argv)
         return state_path
 
