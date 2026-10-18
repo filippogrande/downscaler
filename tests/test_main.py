@@ -80,7 +80,7 @@ def test_recovery_can_restart_false_non_riavvia(module, avvia_main, servizio, tm
     avvii = []
     monkeypatch.setattr(module, "start_service", lambda s: avvii.append(s["name"]) or True)
     salvati = []
-    monkeypatch.setattr(module, "save_state", lambda s: salvati.append(s))
+    monkeypatch.setattr(module, "save_state", salvati.append)
 
     with caplog.at_level(logging.INFO, logger="emergency-stop"):
         module.main()
@@ -106,7 +106,7 @@ def test_recovery_metriche_risalite_torna_a_monitor(module, avvia_main, servizio
     avvii = []
     monkeypatch.setattr(module, "start_service", lambda s: avvii.append(s["name"]) or True)
     salvati = []
-    monkeypatch.setattr(module, "save_state", lambda s: salvati.append(s))
+    monkeypatch.setattr(module, "save_state", salvati.append)
 
     with caplog.at_level(logging.INFO, logger="emergency-stop"):
         module.main()
