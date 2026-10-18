@@ -1,0 +1,9 @@
+DIAG pytest
+```
+ERROR    emergency-stop:state.py:33 Stato illeggibile (/tmp/pytest-of-runner/pytest-0/test_load_state_con_file_illeg0/state.json: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)), riparto da zero
+FAILED tests/test_main.py::test_super_stop_load_critica_ferma_due_servizi - AssertionError: assert ['sonarr'] == ['radarr', 'sonarr']
+FAILED tests/test_main.py::test_super_stop_iowait_critico_ferma_due_servizi - AssertionError: assert [] == ['radarr', 'sonarr']
+FAILED tests/test_main.py::test_stop_normale_ferma_un_servizio - AssertionError: assert [] == ['radarr']
+FAILED tests/test_state.py::test_load_state_con_file_illeggibile - AssertionError: assert ['radarr', 'sonarr'] == []
+FAILED tests/test_state.py::test_load_state_file_assente_usa_i_default - AssertionError: assert ['radarr', 'sonarr'] == []
+```
