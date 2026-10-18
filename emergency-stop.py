@@ -54,12 +54,21 @@ if TYPE_CHECKING:
 # li usa piu'.
 import subprocess  # noqa: F401
 import time  # noqa: F401
+import types
+
+# I test patchano MODULE.requests (modulo condiviso, come subprocess e time):
+# il nome deve esistere in questo modulo anche se il codice non lo usa.
+import requests  # noqa: F401
 
 from downscaler import config as config_mod
 from downscaler import docker_ops, monitoring, services
 from downscaler.config import CONFIG_PATH, SERVICES_DIR, STATE_PATH, _merge_defaults, _normalize_state
+# I test leggono module.DEFAULTS: il nome deve esistere in questo modulo.
+from downscaler.config import DEFAULTS  # noqa: F401
 from downscaler.docker_ops import is_service_running as _docker_is_service_running
 from downscaler.docker_ops import start_service, stop_service
+# I test chiamano module._which: il nome deve esistere in questo modulo.
+from downscaler.docker_ops import _which  # noqa: F401
 from downscaler.incidents import (
     collect_incident_snapshot as _collect_incident_snapshot,
     send_incident_report as _send_incident_report,
@@ -73,12 +82,34 @@ from downscaler.monitoring import (
 # I test chiamano module.update_window: il nome deve esistere nel namespace di
 # questo modulo anche se il codice non lo usa.
 from downscaler.monitoring import update_window  # noqa: F401
+# I test patchano module._glances_get: il nome deve esistere in questo modulo.
+from downscaler.monitoring import _glances_get  # noqa: F401
 from downscaler.services import check_service_files
 from downscaler.state import load_state as _load_state
 from downscaler.state import save_state as _save_state, send_telegram
 
 log = config_mod.log
 running_containers = docker_ops.running_containers
+
+
+# DRY_RUN e' un alias VIVO di config_mod.DRY_RUN: i flag --dry-run/--no-dry-run
+# scrivono config_mod.DRY_RUN e i test scrivono module.DRY_RUN. Un semplice
+# `from downscaler.config import DRY_RUN` congelerebbe il valore all'import,
+# quindi le due scritture non si vedrebbero piu'. La property definita sul
+# __class__ del modulo risolve lettura e scrittura sul nome di config_mod.
+# N802: il nome della property DEVE restare DRY_RUN (e' l'alias del nome di
+# config_mod), quindi il metodo non si puo' rinominare in minuscolo.
+class _EmergencyModule(types.ModuleType):
+    @property
+    def DRY_RUN(self) -> bool:  # noqa: N802
+        return config_mod.DRY_RUN
+
+    @DRY_RUN.setter
+    def DRY_RUN(self, value: bool) -> None:  # noqa: N802
+        config_mod.DRY_RUN = value
+
+
+__class__ = _EmergencyModule
 
 
 def _parse_args() -> argparse.Namespace:
@@ -93,9 +124,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_services(services_dir: Path | None = None) -> list[dict]:
+def load_services(services_dir: Path | None = None, log_missing: bool = True) -> list[dict]:
     """Legge i file di servizio dal namespace di questo modulo."""
-    return services.load_services(services_dir or SERVICES_DIR)
+    return services.load_services(services_dir or SERVICES_DIR, log_missing=log_missing)
 
 
 def load_state() -> dict:
