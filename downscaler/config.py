@@ -6,6 +6,7 @@ qui, cosi' i default e i path restano in un unico posto.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from pathlib import Path
 import requests
 import yaml
 
-# ─── Path ──────────────────────────────────────────────────────────────────
+# ─── Path ──────────────────────────────────────────────────────────────
 #
 # I path si leggono da env perche' _setup_logging() gira a import: i test
 # impostano EMERGENCY_STOP_LOG_PATH prima di caricare questo modulo.
@@ -27,7 +28,7 @@ LOG_PATH = Path(os.environ.get("EMERGENCY_STOP_LOG", "/app/logs/emergency-stop.l
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
 DEFAULT_PRIORITY = 100
 
-# ─── Default di configurazione ─────────────────────────────────────────────
+# ─── Default di configurazione ─────────────────────────────────────────
 #
 # Un config vecchio (manca una chiave aggiunta dopo) non deve far crashare
 # il container: le chiavi assenti prendono questi valori.
@@ -117,13 +118,19 @@ def _merge_defaults(config: dict) -> dict:
 
 
 def _normalize_state(state: dict) -> dict:
-    """Completa uno stato parziale con le chiavi mancanti (STATE_DEFAULTS)."""
-    normalized = dict(STATE_DEFAULTS)
+    """Completa uno stato parziale con le chiavi mancanti (STATE_DEFAULTS).
+
+    I default sono copiati in profondita': contengono liste, e un
+    `dict(STATE_DEFAULTS)` le condividerebbe con lo stato caricato. Un
+    append su `state["stopped_services"]` scriverebbe allora sui default
+    del modulo, contaminando ogni stato caricato dopo.
+    """
+    normalized = copy.deepcopy(STATE_DEFAULTS)
     normalized.update(state)
     return normalized
 
 
-# ─── Logging ───────────────────────────────────────────────────────────────
+# ─── Logging ──────────────────────────────────────────────────────────
 
 def _setup_logging() -> None:
     """Configura il logging su file e stdout.

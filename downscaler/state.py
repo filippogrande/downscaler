@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -19,9 +20,13 @@ def load_state(path: Path | None = None) -> dict:
     Serve perche' uno stato scritto da una versione precedente (o in
     dry-run) puo' non avere tutte le chiavi: senza questo completamento
     il primo accesso solleva KeyError e il container va in loop.
+
+    I default sono copiati in profondita': contengono liste, e un
+    `dict(STATE_DEFAULTS)` le condividerebbe con lo stato caricato, quindi
+    un append sullo stato scriverebbe sui default del modulo.
     """
     state_path = path or config_mod.STATE_PATH
-    state = dict(STATE_DEFAULTS)
+    state = copy.deepcopy(STATE_DEFAULTS)
     if state_path.exists():
         try:
             loaded = json.loads(state_path.read_text())

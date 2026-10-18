@@ -6,11 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -41,31 +36,7 @@ jobs:
         run: bandit -r emergency-stop.py -ll
 
       - name: Test
-        run: |
-          set -o pipefail
-          pytest --tb=short -q 2>&1 | tee pytest-ci.log
-          exit $?
-
-      # DIAGNOSTICA TEMPORANEA: scrive i test falliti in un file del repo.
-      - name: Diagnostica test falliti
-        if: always()
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.existsSync('pytest-ci.log') ? fs.readFileSync('pytest-ci.log', 'utf8') : '(log assente)';
-            const righe = log.split('\n').filter((l) => /^(FAILED|ERROR)/.test(l));
-            const corpo = ['DIAG pytest', '```', ...righe, '```'].join('\n');
-            const branch = context.payload.pull_request ? context.payload.pull_request.head.ref : context.ref_name;
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: 'diag-pytest.log',
-              message: 'diag: log pytest',
-              content: Buffer.from(corpo).toString('base64'),
-              branch,
-            });
+        run: pytest --tb=short -q
 
       - name: Docker build
         run: docker build -t downscaler .
