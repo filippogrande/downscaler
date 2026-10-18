@@ -157,3 +157,15 @@ def mock_glances(module, monkeypatch):
     valori = {"iowait": 1.0, "load": 1.0}
     monkeypatch.setattr(module, "get_glances_metrics", lambda config, *a, **k: (valori["iowait"], valori["load"]))
     return valori
+
+
+def pytest_terminal_summary(terminalreporter):
+    """DIAGNOSTICA TEMPORANEA: i test falliti come annotazioni di CI (::error::)."""
+    failed = list(terminalreporter.stats.get("failed", [])) + list(terminalreporter.stats.get("error", []))
+    for rep in failed[:10]:
+        detail = ""
+        longrepr = getattr(rep, "longrepr", None)
+        if longrepr is not None:
+            righe = [riga for riga in str(longrepr).splitlines() if riga.strip()]
+            detail = righe[-1] if righe else ""
+        print(f"::error::FAIL {rep.nodeid} - {detail}", flush=True)

@@ -94,13 +94,15 @@ def test_send_telegram_token_placeholder_non_invia(module, monkeypatch):
     assert invii == []
 
 
-def test_send_telegram_invia_il_messaggio(module, monkeypatch):
+def test_send_telegram_invia_il_messaggio(module, monkeypatch, http_response):
     monkeypatch.setattr(module, "DRY_RUN", False)
     invii = []
+    # Il fake deve restituire una risposta vera: send_telegram chiama
+    # raise_for_status() sul valore di ritorno di requests.post.
     monkeypatch.setattr(
         module.requests,
         "post",
-        lambda url, json, timeout: invii.append((url, json, timeout)),
+        lambda url, json, timeout: invii.append((url, json, timeout)) or http_response({}),
     )
 
     module.send_telegram("ciao", {"telegram": {"enabled": True, "bot_token": "TOKEN", "chat_id": "42"}})
