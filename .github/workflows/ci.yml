@@ -40,3 +40,11 @@ jobs:
 
       - name: Docker build
         run: docker build -t downscaler .
+
+      # Il build da solo non basta: il Dockerfile puo' copiare i moduli nel
+      # posto sbagliato (es. `COPY downscaler/ ./` li appiattisce in /app)
+      # e l'immagine si builda comunque. Verifica che il package sia
+      # importabile DENTRO l'immagine — e' il modo piu' diretto per beccare
+      # questo bug prima che arrivi al container.
+      - name: Docker image imports downscaler
+        run: docker run --rm --entrypoint python3 downscaler -c "import downscaler, downscaler.config, downscaler.monitoring, downscaler.services, downscaler.state, downscaler.docker_ops, downscaler.incidents"
