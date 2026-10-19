@@ -20,9 +20,14 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# `downscaler/` e' il package con la logica: senza questo COPY l'entrypoint
-# non troverebbe i moduli e il container partirebbe in restart loop.
-COPY emergency-stop.py entrypoint.sh downscaler/ ./
+# `downscaler/` e' il package con la logica: l'entrypoint fa
+# `from downscaler import ...`, quindi il package DEVE stare in /app/downscaler.
+# Trappola: `COPY <dir>/ ./` copia solo i CONTENUTI della directory, non la
+# directory stessa — con `COPY emergency-stop.py entrypoint.sh downscaler/ ./`
+# i moduli finivano in /app/ e `import downscaler` moriva con ModuleNotFoundError
+# (restart loop). Serve un dest esplicito.
+COPY emergency-stop.py entrypoint.sh ./
+COPY downscaler /app/downscaler
 RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
