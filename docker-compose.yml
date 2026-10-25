@@ -9,7 +9,6 @@ services:
     restart: unless-stopped
     # Valori letterali, niente interpolazione ${...}, nessun .env.
     # Per farlo lavorare davvero: DRY_RUN: "false" qui, poi docker compose up -d.
-    # L'intervallo del loop e' check_interval_sec in config.yaml (una sola fonte).
     environment:
       DRY_RUN: "true"
     volumes:
@@ -21,7 +20,12 @@ services:
       # I compose_dir nei file servizio sono path assoluti dell'HOST
       # (/mnt/applicazioni/yml/docker/...): senza questo mount il container
       # non li vede e TUTTI i servizi risultano inesistenti.
-      - /mnt/applicazioni:/mnt/applicazioni:ro
+      #
+      # rw (non ro): incidents.dir in config.yaml e' sotto questo mount e lo
+      # snapshot d'incidente scrive li'. Con :ro il mkdir sollevava OSError
+      # (EROFS) dentro _close_incident e il container partiva in restart loop
+      # (24/10/26). Il mount generico resta rw apposta.
+      - /mnt/applicazioni:/mnt/applicazioni:rw
       - state:/app/state
       # Nomi host e container DIVERSI: un bind di un file che non esiste sull'host
       # crea una DIRECTORY dentro il container, e il log handler non la apre.

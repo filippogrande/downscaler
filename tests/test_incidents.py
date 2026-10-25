@@ -54,6 +54,25 @@ def test_collect_incident_snapshot_disabilitato_non_fa_nulla(module, tmp_path):
     assert not (tmp_path / "2026-01-01_00-00-00").exists()
 
 
+def test_collect_incident_snapshot_cartella_non_scrivibile_non_crasha(module, tmp_path):
+    """Cartella non scrivibile: lo snapshot si salta, il loop non deve morire."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("sono un file, non una directory")
+    config = {
+        "incidents": {
+            "dir": str(blocker / "incidents"),
+            "log_tail": 100,
+            "log_window_min": 15,
+        }
+    }
+
+    result = module.collect_incident_snapshot(
+        config, [], {}, datetime(2026, 10, 24, 22, 0, 0, tzinfo=timezone.utc), "start"
+    )
+
+    assert result is None
+
+
 def test_collect_incident_snapshot_specifica_la_fase_nel_summary(module, monkeypatch, tmp_path):
     services = [{"name": "radarr", "service_names": ["radarr-radarr-1"]}]
     monkeypatch.setattr(
