@@ -46,7 +46,17 @@ def collect_incident_snapshot(
 
     timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
     snapshot_dir = log_dir / timestamp
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        # FIX: la cartella degli incidenti puo' non essere scrivibile (mount
+        # read-only, NFS che va in read-only, disco pieno, directory cancellata).
+        # Lo snapshot e' un extra diagnostico: se non si puo' scrivere il
+        # downscaler logga e va avanti. Prima di questo guard il mkdir sollevava
+        # OSError dentro _close_incident -> il container usciva con codice 1 e
+        # ripartiva in loop, e il recovery non terminava mai (24/10/26).
+        log.error(f"Impossibile creare la cartella incidenti {log_dir}: {e} - snapshot saltato")
+        return None
 
     window_start = (now - timedelta(minutes=log_window)).isoformat()
     window_end = now.isoformat()
@@ -60,7 +70,7 @@ def collect_incident_snapshot(
         [
             f"Incidente {phase}",
             f"Timestamp: {now.isoformat()}",
-            f"Finestra log: {window_start} → {window_end}",
+            f"Finestra log: {window_start} -> {window_end}",
             f"Servizi fermati: {', '.join(state.get('incident_services', []))}",
             f"Container: {', '.join(all_containers)}",
         ]
@@ -114,7 +124,7 @@ def send_incident_report(
     duration_min = (datetime.now() - datetime.fromisoformat(state["incident_start"])).total_seconds() / 60
     fermati = ", ".join(state.get("incident_services", []))
     message = (
-        f"✅ Incidente risolto — {duration_min:.0f} minuti\n"
+        f"✅ Incidente risolto - {duration_min:.0f} minuti\n"
         f"Servizi fermati: {len(state.get('incident_services', []))} ({fermati})\n"
         f"Log: {snapshot_dir}"
     )
