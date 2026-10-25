@@ -35,8 +35,6 @@ def collect_incident_snapshot(
     if not incidents_config.get("enabled", True):
         return None
     if config_mod.DRY_RUN:
-        # In dry-run non si scrive nulla: la cartella degli incidenti e' sul
-        # disco dell'host e un giro simulato non deve crearla.
         log.info("[dry-run] snapshot incidente non scritto")
         return None
 
@@ -49,12 +47,6 @@ def collect_incident_snapshot(
     try:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        # FIX: la cartella degli incidenti puo' non essere scrivibile (mount
-        # read-only, NFS che va in read-only, disco pieno, directory cancellata).
-        # Lo snapshot e' un extra diagnostico: se non si puo' scrivere il
-        # downscaler logga e va avanti. Prima di questo guard il mkdir sollevava
-        # OSError dentro _close_incident -> il container usciva con codice 1 e
-        # ripartiva in loop, e il recovery non terminava mai (24/10/26).
         log.error(f"Impossibile creare la cartella incidenti {log_dir}: {e} - snapshot saltato")
         return None
 
@@ -122,10 +114,10 @@ def send_incident_report(
     if not incidents_config.get("telegram_report", True):
         return
     duration_min = (datetime.now() - datetime.fromisoformat(state["incident_start"])).total_seconds() / 60
-    fermati = ", ".join(state.get("incident_services", []))
+    fermati = sorted(set(state.get("incident_services", [])))
     message = (
         f"✅ Incidente risolto - {duration_min:.0f} minuti\n"
-        f"Servizi fermati: {len(state.get('incident_services', []))} ({fermati})\n"
+        f"Servizi fermati: {len(fermati)} ({', '.join(fermati)})\n"
         f"Log: {snapshot_dir}"
     )
     notify(message, config)

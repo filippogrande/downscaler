@@ -201,8 +201,6 @@ def handle_recovery(
         log.info(f"Recovery: ancora {remaining / 60:.0f} min prima del prossimo riavvio")
         return
     if _above_stop(avg_iowait, avg_load, monitor["stop_threshold"], monitor["load_stop_threshold"]):
-        # FIX: se le metriche risalgono sopra la soglia di stop il recovery
-        # non puo' riavviare niente: si torna in monitor mode.
         log.warning(
             f"Recovery: ancora sopra soglia (iowait_media={fmt_metric(avg_iowait)}, "
             f"load_media={fmt_metric(avg_load)}), torno in monitor mode"
@@ -234,7 +232,6 @@ def _restart_next_service(config: dict, services_list: list[dict], state: dict, 
         actions.save(state)
         return
     if not service["can_restart"]:
-        # FIX: can_restart=false va rispettato anche nel recovery.
         log.info(f"Recovery: {service_name} ha can_restart=false, lo salto")
         state["stopped_services"].pop()
         actions.save(state)
@@ -346,7 +343,11 @@ def _stop_one(config: dict, state: dict, service: dict, now: datetime, actions: 
         actions.save(state)
         return False
     state["stopped_services"].append(service["name"])
-    state["incident_services"].append(service["name"])
+    # FIX: il recovery toglie il nome da stopped_services ma non da
+    # incident_services. Senza questo guard un servizio fermato, riacceso e
+    # rifermato veniva elencato N volte (report con 234 nomi, 25/10/26).
+    if service["name"] not in state["incident_services"]:
+        state["incident_services"].append(service["name"])
     state["last_alarm_time"] = now.isoformat()
     state["failed_stops"] = [n for n in state.get("failed_stops", []) if n != service["name"]]
     actions.save(state)
