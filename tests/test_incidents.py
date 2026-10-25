@@ -125,3 +125,46 @@ def test_send_incident_report_disabilitato_non_manda_nulla(module, tmp_path, mon
     module.send_incident_report(tmp_path, {}, config)
 
     assert calls == []
+
+
+def test_send_incident_report_conta_servizi_distinti(module, tmp_path, monkeypatch):
+    """Nomi duplicati nello stato: il report elenca e conta i servizi distinti."""
+    calls = []
+    monkeypatch.setattr(module, "send_telegram", lambda msg, config: calls.append(msg))
+
+    state = {
+        "incident_start": "2026-10-25T09:00:00",
+        "incident_services": ["radarr", "sonarr", "radarr", "radarr", "sonarr"],
+    }
+    config = {"incidents": {"telegram_report": True}}
+
+    module.send_incident_report(tmp_path, state, config)
+
+    assert "Servizi fermati: 2 (radarr, sonarr)" in calls[0]
+
+
+def test_stop_one_non_duplica_i_servizi_fermati(module):
+    """Un servizio fermato due volte compare una sola volta in incident_services."""
+    salvati = []
+
+    def salva(state):
+        salvati.append(list(state["incident_services"]))
+
+    actions = module.monitoring.Actions(
+        save=salva,
+        notify=lambda msg, config: None,
+        stop=lambda service: True,
+        start=lambda service: True,
+        snapshot=lambda *a, **k: None,
+        report=lambda *a, **k: None,
+        sample=lambda *a, **k: (1.0, 1.0),
+    )
+    state = {"stopped_services": [], "incident_services": [], "failed_stops": []}
+    service = {"name": "radarr", "service_names": ["radarr-radarr-1"]}
+    now = datetime(2026, 10, 25, 10, 0, 0, tzinfo=timezone.utc)
+
+    module.monitoring._stop_one({}, state, service, now, actions)
+    state["stopped_services"] = []  # il recovery lo riaccende e lo toglie dai fermati
+    module.monitoring._stop_one({}, state, service, now, actions)
+
+    assert state["incident_services"] == ["radarr"]
