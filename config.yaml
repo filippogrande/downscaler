@@ -17,7 +17,7 @@ monitor:
   load_restart_threshold: 4.0    # load < 4 -> puo' riavviare
   load_super_threshold: 11.0     # load > 11 -> super-stop: ferma 2 servizi
   iowait_super_threshold: 95.0   # iowait > 95% -> super-stop: ferma 2 servizi
-  check_interval_sec: 60         # loop ogni 60s (letto da entrypoint.sh)
+  check_interval_sec: 60         # loop ogni 60s: lo legge entrypoint.sh
 
 recovery:
   calm_duration_sec: 300         # 5 min di calma prima del primo riavvio

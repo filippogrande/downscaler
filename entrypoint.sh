@@ -31,9 +31,13 @@ case "${1:-}" in
 esac
 
 # Loop infinito: esegue il check, aspetta, ricomincia.
-# L'intervallo lo decide config.yaml (check_interval_sec), qui non c'e' nulla da duplicare.
+# L'intervallo lo decide config.yaml (check_interval_sec): una sola fonte,
+# qui non c'e' nulla da duplicare.
+# Se il config non e' leggibile si torna a 60s, il default del repo: meglio
+# un intervallo sbagliato che un loop che non parte.
+INTERVAL=$(python3 -c "import yaml; print(yaml.safe_load(open('/app/config.yaml'))['monitor']['check_interval_sec'])") || INTERVAL=60
 while true; do
     python3 /app/emergency-stop.py
-    sleep 60
-    echo "[loop] prossimo check tra 60s (DRY_RUN=${DRY_RUN:-true})"
+    echo "[loop] prossimo check tra ${INTERVAL}s (DRY_RUN=${DRY_RUN:-true})"
+    sleep "$INTERVAL"
 done
