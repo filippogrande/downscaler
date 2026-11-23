@@ -1,4 +1,4 @@
-FROM python:3.14-alpine
+FROM python:3.15-alpine
 
 # ── Dipendenze di sistema ───────────────────────────────────────────────
 # Il downscaler chiama il CLI docker (`docker ps`) E `docker compose down/up`.
